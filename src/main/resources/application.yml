@@ -20,18 +20,7 @@ spring:
     store-type: redis
     # session 30 天过期
     timeout: 2592000
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/yun_picture
-    username: root
-    password: 123456
-  # Redis 配置
-  redis:
-    database: 0
-    host: 192.168.247.101
-    port: 6379
-    timeout: 5000
-    password: dogCAT3066
+
 
 mybatis-plus:
   configuration:
