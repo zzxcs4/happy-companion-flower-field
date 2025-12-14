@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zzx.yunpicturebackend.mapper.PostMapper">
+
+    <resultMap id="BaseResultMap" type="com.zzx.yunpicturebackend.model.entity.Post">
+            <id property="id" column="id" />
+            <result property="fieldId" column="fieldId" />
+            <result property="userId" column="userId" />
+            <result property="title" column="title" />
+            <result property="images" column="images" />
+            <result property="content" column="content" />
+            <result property="liked" column="liked" />
+            <result property="comments" column="comments" />
+            <result property="createTime" column="createTime" />
+            <result property="updateTime" column="updateTime" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,fieldId,userId,title,images,content,
+        liked,comments,createTime,updateTime
+    </sql>
+</mapper>

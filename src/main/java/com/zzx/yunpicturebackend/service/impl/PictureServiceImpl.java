@@ -84,19 +84,22 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NO_AUTH_ERROR);
         // 空间权限校验
         Long spaceId = pictureUploadRequest.getSpaceId();
+        Space space = spaceService.getById(spaceId);
         if (spaceId != null) {
-            Space space = spaceService.getById(spaceId);
+
             ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR, "空间不存在");
             // 必须空间创建人（管理员）才能上传
 //            if (!loginUser.getId().equals(space.getUserId())) {
 //                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "没有空间权限");
 //            }
             // 校验额度
+            if(space.getSpaceType()==0||space.getSpaceType()==1){
             if (space.getTotalCount() >= space.getMaxCount()) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "空间条数不足");
             }
             if (space.getTotalSize() >= space.getMaxSize()) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "空间大小不足");
+            }
             }
         }
 
@@ -180,6 +183,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         transactionTemplate.execute(status -> {
             boolean result = this.saveOrUpdate(picture);
             ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "图片上传失败");
+            if( space != null&&(space.getSpaceType()==0||space.getSpaceType()==1)){
             if (finalSpaceId != null) {
                 boolean update = spaceService.lambdaUpdate()
                         .eq(Space::getId, finalSpaceId)
@@ -187,7 +191,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                         .setSql("totalCount = totalCount + 1")
                         .update();
                 ThrowUtils.throwIf(!update, ErrorCode.OPERATION_ERROR, "额度更新失败");
-            }
+            }}
             return picture;
         });
         return PictureVO.objToVo(picture);

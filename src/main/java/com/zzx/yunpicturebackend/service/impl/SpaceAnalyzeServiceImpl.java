@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.exception.ThrowUtils;
+import com.zzx.yunpicturebackend.mapper.PictureMapper;
 import com.zzx.yunpicturebackend.mapper.SpaceMapper;
 import com.zzx.yunpicturebackend.model.dto.space.analyze.*;
 import com.zzx.yunpicturebackend.model.entity.Picture;
@@ -40,6 +41,8 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
     private SpaceService spaceService;
     @Resource
     private PictureService pictureService;
+    @Resource
+    private PictureMapper pictureMapper;
     @Override
     public void checkSpaceAnalyzeAuth(SpaceAnalyzeRequest spaceAnalyzeRequest, User loginUser) {
         // 检查权限
@@ -88,6 +91,7 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
             // 仅管理员可以访问
             boolean isAdmin = userService.isAdmin(loginUser);
             ThrowUtils.throwIf(!isAdmin, ErrorCode.NO_AUTH_ERROR, "无权访问空间");
+
             // 统计公共图库的资源使用
             QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
             queryWrapper.select("picSize");
@@ -107,7 +111,26 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
             spaceUsageAnalyzeResponse.setMaxCount(null);
             spaceUsageAnalyzeResponse.setCountUsageRatio(null);
             return spaceUsageAnalyzeResponse;
-        } else {
+        } else if(spaceService.getById(spaceUsageAnalyzeRequest.getSpaceId()).getSpaceType()==2)
+        {
+
+
+
+            List<Object> pictureObjList = pictureMapper.selectPicSizeBySpaceType(spaceUsageAnalyzeRequest.getSpaceId(),spaceUsageAnalyzeRequest.isQueryAll());
+            long usedSize = pictureObjList.stream().mapToLong(result -> result instanceof Long ? (Long) result : 0).sum();
+            long usedCount = pictureObjList.size();
+            // 封装返回结果
+            SpaceUsageAnalyzeResponse spaceUsageAnalyzeResponse = new SpaceUsageAnalyzeResponse();
+            spaceUsageAnalyzeResponse.setUsedSize(usedSize);
+            spaceUsageAnalyzeResponse.setUsedCount(usedCount);
+            // 公共图库无上限、无比例
+            spaceUsageAnalyzeResponse.setMaxSize(null);
+            spaceUsageAnalyzeResponse.setSizeUsageRatio(null);
+            spaceUsageAnalyzeResponse.setMaxCount(null);
+            spaceUsageAnalyzeResponse.setCountUsageRatio(null);
+            return spaceUsageAnalyzeResponse;
+        }
+        else {
             // 查询指定空间
             Long spaceId = spaceUsageAnalyzeRequest.getSpaceId();
             ThrowUtils.throwIf(spaceId == null || spaceId <= 0, ErrorCode.PARAMS_ERROR);
@@ -120,6 +143,7 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
             // 构造返回结果
             SpaceUsageAnalyzeResponse response = new SpaceUsageAnalyzeResponse();
+
             response.setUsedSize(space.getTotalSize());
             response.setMaxSize(space.getMaxSize());
             // 后端直接算好百分比，这样前端可以直接展示

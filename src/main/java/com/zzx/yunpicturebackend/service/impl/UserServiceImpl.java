@@ -5,25 +5,41 @@ import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
+import com.zzx.yunpicturebackend.exception.ThrowUtils;
 import com.zzx.yunpicturebackend.manager.auth.StpKit;
+import com.zzx.yunpicturebackend.manager.upload.FilePictureUpload;
+import com.zzx.yunpicturebackend.manager.upload.PictureUploadTemplate;
+import com.zzx.yunpicturebackend.model.dto.file.UploadPictureResult;
+import com.zzx.yunpicturebackend.model.dto.user.UserAvatarUploadRequest;
 import com.zzx.yunpicturebackend.model.dto.user.UserQueryRequest;
+import com.zzx.yunpicturebackend.model.entity.Picture;
+import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.zzx.yunpicturebackend.mapper.UserMapper;
 import com.zzx.yunpicturebackend.model.enums.UserRoleEnum;
 import com.zzx.yunpicturebackend.model.vo.LoginUserVO;
+import com.zzx.yunpicturebackend.model.vo.PictureVO;
 import com.zzx.yunpicturebackend.model.vo.UserVO;
 import com.zzx.yunpicturebackend.service.UserService;
+import com.zzx.yunpicturebackend.utils.AlgorithmUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.DigestUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.zzx.yunpicturebackend.constant.UserConstant.USER_LOGIN_STATE;
@@ -37,6 +53,10 @@ import static com.zzx.yunpicturebackend.constant.UserConstant.USER_LOGIN_STATE;
 @Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     implements UserService {
+
+    @Resource
+    private FilePictureUpload filePictureUpload;
+
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
         // 1. 校验
@@ -194,6 +214,134 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     @Override
     public boolean isAdmin(User user) {
         return user != null && UserRoleEnum.ADMIN.getValue().equals(user.getUserRole());
+    }
+
+    /**
+     * 根据标签搜索用户。(sql查询版)
+     *
+     * @param tagNameList 用户要搜索的标签
+     * @return
+     * @Deprecated 过时
+     */
+    @Override
+    public List<UserVO> searchUsersByTags(List<String> tagNameList,String username) {
+//        if (CollectionUtils.isEmpty(tagNameList)) {
+//            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+//        }
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        //拼接tag
+        // like '%Java%' and like '%Python%'
+        if(tagNameList!=null&& !tagNameList.isEmpty()){
+            for (String tagList : tagNameList) {
+                queryWrapper = queryWrapper.like("tags", tagList);
+            }
+        }
+
+        queryWrapper.like(StrUtil.isNotBlank(username),"username", username);
+        List<User> userList = this.list(queryWrapper);
+        return userList.stream().map(this::getUserVO).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<UserVO> matchUsers(long num, User loginUser) {
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.isNotNull("tags");
+        queryWrapper.select("id","tags");
+        List<User> userList = this.list(queryWrapper);
+
+        String tags = loginUser.getTags();
+        Gson gson = new Gson();
+        List<String> tagList = gson.fromJson(tags, new TypeToken<List<String>>() {
+        }.getType());
+        // 用户列表的下表 => 相似度'
+        List<Pair<User,Long>> list = new ArrayList<>();
+        // 依次计算当前用户和所有用户的相似度
+        for (int i = 0; i <userList.size(); i++) {
+            User user = userList.get(i);
+            String userTags = user.getTags();
+            //无标签的 或当前用户为自己
+            if (StringUtils.isBlank(userTags) || Objects.equals(user.getId(), loginUser.getId())){
+                continue;
+            }
+            List<String> userTagList = gson.fromJson(userTags, new TypeToken<List<String>>() {
+            }.getType());
+            //计算分数
+            long distance = AlgorithmUtils.minDistance(tagList, userTagList);
+            list.add(new ImmutablePair<>(user,distance));
+        }
+        //按编辑距离有小到大排序
+        List<Pair<User, Long>> topUserPairList = list.stream()
+                .sorted((a, b) -> (int) (a.getValue() - b.getValue()))
+                .limit(num)
+                .collect(Collectors.toList());
+        //有顺序的userID列表
+        List<Long> userListVo = topUserPairList.stream()
+                .map(pair -> pair.getLeft().getId())  // 不是 getKey()
+                .collect(Collectors.toList());
+
+        //根据id查询user完整信息
+        QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
+        userQueryWrapper.in("id",userListVo);
+        Map<Long, List<UserVO>> userIdUserListMap = this.list(userQueryWrapper).stream()
+                .map(this::getUserVO)
+                .collect(Collectors.groupingBy(UserVO::getId));
+
+        // 因为上面查询打乱了顺序，这里根据上面有序的userID列表赋值
+        List<UserVO> finalUserList = new ArrayList<>();
+        for (Long userId : userListVo){
+            finalUserList.add(userIdUserListMap.get(userId).get(0));
+        }
+        return finalUserList;
+    }
+
+    @Override
+    public String uploadUserAvatar(MultipartFile multipartFile, UserAvatarUploadRequest userAvatarUploadRequest, HttpServletRequest request) {
+        if (multipartFile == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "图片为空");
+        }
+        User loginUser = this.getLoginUser(request);
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NO_AUTH_ERROR);
+
+
+
+        // 用于判断是新增还是更新图片
+        String userAvatar= loginUser.getUserAvatar();
+
+        // 如果是更新图片，需要校验图片是否存在
+        if (userAvatar != null) {
+            String oldUserAvatar =userAvatar ;
+            ThrowUtils.throwIf(oldUserAvatar == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");}
+            // 仅本人或管理员可编辑
+//            if (!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
+//                throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+//            }
+
+
+        // 上传图片，得到信息
+
+
+
+
+        // 按照用户 id 划分目录 => 按照空间划分目录
+        String uploadPathPrefix;
+
+        uploadPathPrefix = String.format("userAvatar/%s", loginUser.getId());
+
+
+        // 根据 inputSource 类型区分上传方式
+        PictureUploadTemplate pictureUploadTemplate =  filePictureUpload;;
+
+        UploadPictureResult uploadPictureResult = pictureUploadTemplate.uploadPicture(multipartFile, uploadPathPrefix);
+        // 构造要入库的图片信息
+
+        loginUser.setUserAvatar(uploadPictureResult.getUrl());
+
+
+        boolean result = this.updateById(loginUser);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "图片上传失败");
+
+
+        return uploadPictureResult.getUrl();
     }
 
 }

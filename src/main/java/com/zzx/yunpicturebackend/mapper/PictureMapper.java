@@ -2,6 +2,9 @@ package com.zzx.yunpicturebackend.mapper;
 
 import com.zzx.yunpicturebackend.model.entity.Picture;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 /**
 * @author zzx
@@ -10,6 +13,8 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 * @Entity com.zzx.yunpicturebackend.model.entity.Picture
 */
 public interface PictureMapper extends BaseMapper<Picture> {
+
+        List<Object> selectPicSizeBySpaceType(@Param("spaceId")Long spaceId,@Param("queryAll") boolean queryAll);
 
 }
 

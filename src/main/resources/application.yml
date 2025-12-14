@@ -6,9 +6,16 @@ server:
     session:
       cookie:
         max-age: 2592000
+        path: /
+        # 关键修改：移除 same-site: none 或改为 lax
+        same-site: lax
+        # 关键修改：设为 false 以兼容 HTTP
+        secure: false
+        http-only: true
+
 spring:
   profiles:
-    active: local
+    active: prod
   application:
     name: yun-picture-backend
   # 开放更大的文件上传体积
@@ -18,8 +25,23 @@ spring:
   # session 配置
   session:
     store-type: redis
+    redis:
+      configure-action: none
     # session 30 天过期
     timeout: 2592000
+
+  # Cookie配置
+
+# application.yml
+sa-token:
+  token-name: satoken
+  timeout: 2592000
+
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  is-log: false
+  active-timeout: -1
 
 
 mybatis-plus:

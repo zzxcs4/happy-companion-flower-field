@@ -1,11 +1,13 @@
 package com.zzx.yunpicturebackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.zzx.yunpicturebackend.model.dto.user.UserAvatarUploadRequest;
 import com.zzx.yunpicturebackend.model.dto.user.UserQueryRequest;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.zzx.yunpicturebackend.model.vo.LoginUserVO;
 import com.zzx.yunpicturebackend.model.vo.UserVO;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -63,4 +65,9 @@ public interface UserService extends IService<User> {
      */
     boolean isAdmin(User user);
 
+     List<UserVO> searchUsersByTags(List<String> tagNameList,String username);
+
+    List<UserVO> matchUsers(long num, User loginUser);
+
+    String uploadUserAvatar(MultipartFile multipartFile, UserAvatarUploadRequest userAvatarUploadRequest,HttpServletRequest request);
 }

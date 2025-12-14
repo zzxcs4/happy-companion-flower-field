@@ -4,6 +4,7 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.zzx.yunpicturebackend.annotation.AuthCheck;
@@ -231,8 +232,8 @@ public class PictureController {
             pictureQueryRequest.setNullSpaceId(true);
         } else {
             // 私有空间
-            boolean hasPermission = StpKit.SPACE.hasPermission(SpaceUserPermissionConstant.PICTURE_VIEW);
-            ThrowUtils.throwIf(!hasPermission, ErrorCode.NO_AUTH_ERROR);
+            //boolean hasPermission = StpKit.SPACE.hasPermission(SpaceUserPermissionConstant.PICTURE_VIEW);
+            //ThrowUtils.throwIf(!hasPermission, ErrorCode.NO_AUTH_ERROR);
         }
 
         // 限制爬虫

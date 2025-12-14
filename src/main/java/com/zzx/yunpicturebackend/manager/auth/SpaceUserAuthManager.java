@@ -50,7 +50,8 @@ public class SpaceUserAuthManager {
         if (role == null) {
             return new ArrayList<>();
         }
-        return role.getPermissions();
+        List<String> permissions = role.getPermissions();
+        return permissions;
     }
     public List<String> getPermissionList(Picture picture, Space space, User loginUser) {
         if (loginUser == null) {
@@ -88,6 +89,17 @@ public class SpaceUserAuthManager {
                     return new ArrayList<>();
                 } else {
                     return getPermissionsByRole(spaceUser.getSpaceRole());
+                }
+            case FIELD:
+                // 花田空间，查询SpaceUser 并获取角色和权限
+                SpaceUser spaceUser1 = spaceUserService.lambdaQuery()
+                        .eq(SpaceUser::getSpaceId, space.getId())
+                        .eq(SpaceUser::getUserId, loginUser.getId())
+                        .one();
+                if (spaceUser1 == null) {
+                    return new ArrayList<>();
+                } else {
+                    return getPermissionsByRole(spaceUser1.getSpaceRole());
                 }
         }
         return new ArrayList<>();

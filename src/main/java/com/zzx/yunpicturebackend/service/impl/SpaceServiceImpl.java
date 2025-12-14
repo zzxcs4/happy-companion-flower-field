@@ -63,38 +63,43 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         if (StrUtil.isBlank(spaceAddRequest.getSpaceName())) {
             space.setSpaceName("默认空间");
         }
-        if (spaceAddRequest.getSpaceLevel() == null) {
-            space.setSpaceLevel(SpaceLevelEnum.COMMON.getValue());
-        }
         if (spaceAddRequest.getSpaceType() == null) {
             spaceAddRequest.setSpaceType(SpaceTypeEnum.PRIVATE.getValue());
         }
         // 填充数据
-        this.fillSpaceBySpaceLevel(space);
+        if(spaceAddRequest.getSpaceType()==0||spaceAddRequest.getSpaceType()==1){
+            if (spaceAddRequest.getSpaceLevel() == null&&(space.getSpaceType()==0||space.getSpaceType()==1)) {
+                space.setSpaceLevel(SpaceLevelEnum.COMMON.getValue());
+            }
+            this.fillSpaceBySpaceLevel(space);
+        }
         // 数据校验
         this.validSpace(space, true);
         Long userId = loginUser.getId();
         space.setUserId(userId);
         // 权限校验
+        if(spaceAddRequest.getSpaceType()==0||spaceAddRequest.getSpaceType()==1){
         if (SpaceLevelEnum.COMMON.getValue() != spaceAddRequest.getSpaceLevel() && !userService.isAdmin(loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限创建指定级别的空间");
+        }
         }
         // 针对用户进行加锁
         String lock = String.valueOf(userId).intern();
         synchronized (lock) {
             Long newSpaceId = transactionTemplate.execute(status -> {
+                if(spaceAddRequest.getSpaceType()==0||spaceAddRequest.getSpaceType()==1){
                 if (!userService.isAdmin(loginUser)) {
                     boolean exists = this.lambdaQuery()
                             .eq(Space::getUserId, userId)
                             .eq(Space::getSpaceType, spaceAddRequest.getSpaceType())
                             .exists();
-                    ThrowUtils.throwIf(exists, ErrorCode.OPERATION_ERROR, "每个用户每类空间仅能创建一个");
-                }
+                    ThrowUtils.throwIf(exists, ErrorCode.OPERATION_ERROR, "每个用户除创建花田时创建的花田空间外每类空间仅能创建一个");
+                }}
                 // 写入数据库
                 boolean result = this.save(space);
                 ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
                 // 如果是团队空间，关联新增团队成员记录
-                if (SpaceTypeEnum.TEAM.getValue() == spaceAddRequest.getSpaceType()) {
+                if (SpaceTypeEnum.TEAM.getValue() == spaceAddRequest.getSpaceType()||SpaceTypeEnum.FIELD.getValue() == spaceAddRequest.getSpaceType()) {
                     SpaceUser spaceUser = new SpaceUser();
                     spaceUser.setSpaceId(space.getId());
                     spaceUser.setUserId(userId);
@@ -232,13 +237,17 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             if (StrUtil.isBlank(spaceName)) {
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间名称不能为空");
             }
-            if (spaceLevel == null) {
-                throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间级别不能为空");
+            if(spaceTypeEnum==SpaceTypeEnum.PRIVATE||spaceTypeEnum==SpaceTypeEnum.TEAM){
+                if (spaceLevel == null) {
+                    throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间级别不能为空");
+                }
             }
         }
         // 修改数据时，如果要改空间级别
-        if (spaceLevel != null && spaceLevelEnum == null) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间级别不存在");
+        if(spaceTypeEnum==SpaceTypeEnum.PRIVATE||spaceTypeEnum==SpaceTypeEnum.TEAM){
+            if (spaceLevel != null && spaceLevelEnum == null) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间级别不存在");
+            }
         }
         if (StrUtil.isNotBlank(spaceName) && spaceName.length() > 30) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间名称过长");

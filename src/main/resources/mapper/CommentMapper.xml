@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zzx.yunpicturebackend.mapper.CommentMapper">
+
+
+    <select id="getCommentWithUserName" resultType="com.zzx.yunpicturebackend.model.entity.Comment">
+        select c.id,context,publisher,userName,userAvatar,post,c.createTime,c.updateTime from post_comment c
+            left join user u on c.publisher = u.id
+        where post = #{pid}
+        order by c.createTime desc
+    </select>
+</mapper>

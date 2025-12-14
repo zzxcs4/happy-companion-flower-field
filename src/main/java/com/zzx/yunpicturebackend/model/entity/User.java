@@ -50,6 +50,13 @@ public class User implements Serializable {
     private String userRole;
 
     /**
+     * 粉丝数
+     */
+    private Integer fansNum;
+
+    @TableField(exist = false)
+    private Boolean Online;
+    /**
      * 编辑时间
      */
     private Date editTime;
@@ -69,7 +76,7 @@ public class User implements Serializable {
      */
     @TableLogic
     private Integer isDelete;
-
+    private String tags;
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }
