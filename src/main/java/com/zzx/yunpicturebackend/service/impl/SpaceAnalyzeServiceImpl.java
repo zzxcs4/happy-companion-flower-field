@@ -8,10 +8,11 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.exception.ThrowUtils;
-import com.zzx.yunpicturebackend.mapper.PictureMapper;
+
+import com.zzx.yunpicturebackend.mapper.FileMapper;
 import com.zzx.yunpicturebackend.mapper.SpaceMapper;
 import com.zzx.yunpicturebackend.model.dto.space.analyze.*;
-import com.zzx.yunpicturebackend.model.entity.Picture;
+import com.zzx.yunpicturebackend.model.entity.File;
 import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.zzx.yunpicturebackend.model.vo.space.analyze.*;
@@ -42,7 +43,7 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
     @Resource
     private PictureService pictureService;
     @Resource
-    private PictureMapper pictureMapper;
+    private FileMapper pictureMapper;
     @Override
     public void checkSpaceAnalyzeAuth(SpaceAnalyzeRequest spaceAnalyzeRequest, User loginUser) {
         // 检查权限
@@ -59,7 +60,7 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
     }
 
-    private static void fillAnalyzeQueryWrapper(SpaceAnalyzeRequest spaceAnalyzeRequest, QueryWrapper<Picture> queryWrapper) {
+    private static void fillAnalyzeQueryWrapper(SpaceAnalyzeRequest spaceAnalyzeRequest, QueryWrapper<File> queryWrapper) {
         if (spaceAnalyzeRequest.isQueryAll()) {
             return;
         }
@@ -93,8 +94,8 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
             ThrowUtils.throwIf(!isAdmin, ErrorCode.NO_AUTH_ERROR, "无权访问空间");
 
             // 统计公共图库的资源使用
-            QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
-            queryWrapper.select("picSize");
+            QueryWrapper<File> queryWrapper = new QueryWrapper<>();
+            queryWrapper.select("size");
             if (!spaceUsageAnalyzeRequest.isQueryAll()) {
                 queryWrapper.isNull("spaceId");
             }
@@ -165,14 +166,14 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
         checkSpaceAnalyzeAuth(spaceCategoryAnalyzeRequest, loginUser);
 
         // 构造查询条件
-        QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
+        QueryWrapper<File> queryWrapper = new QueryWrapper<>();
         // 根据分析范围补充查询条件
         fillAnalyzeQueryWrapper(spaceCategoryAnalyzeRequest, queryWrapper);
 
         // 使用 MyBatis-Plus 分组查询
         queryWrapper.select("category AS category",
                         "COUNT(*) AS count",
-                        "SUM(picSize) AS totalSize")
+                        "SUM(size) AS totalSize")
                 .groupBy("category");
 
         // 查询并转换结果
@@ -195,7 +196,7 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
         checkSpaceAnalyzeAuth(spaceTagAnalyzeRequest, loginUser);
 
         // 构造查询条件
-        QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
+        QueryWrapper<File> queryWrapper = new QueryWrapper<>();
         fillAnalyzeQueryWrapper(spaceTagAnalyzeRequest, queryWrapper);
 
         // 查询所有符合条件的标签
@@ -226,11 +227,11 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
         checkSpaceAnalyzeAuth(spaceSizeAnalyzeRequest, loginUser);
 
         // 构造查询条件
-        QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
+        QueryWrapper<File> queryWrapper = new QueryWrapper<>();
         fillAnalyzeQueryWrapper(spaceSizeAnalyzeRequest, queryWrapper);
 
         // 查询所有符合条件的图片大小
-        queryWrapper.select("picSize");
+        queryWrapper.select("size");
         List<Long> picSizes = pictureService.getBaseMapper().selectObjs(queryWrapper)
                 .stream()
                 .map(size -> ((Number) size).longValue())
@@ -256,7 +257,7 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
         checkSpaceAnalyzeAuth(spaceUserAnalyzeRequest, loginUser);
 
         // 构造查询条件
-        QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
+        QueryWrapper<File> queryWrapper = new QueryWrapper<>();
         Long userId = spaceUserAnalyzeRequest.getUserId();
         queryWrapper.eq(ObjUtil.isNotNull(userId), "userId", userId);
         fillAnalyzeQueryWrapper(spaceUserAnalyzeRequest, queryWrapper);

@@ -11,5 +11,8 @@ COPY src ./src
 # Build a release artifact.
 RUN mvn package -DskipTests
 
+# 安装 FFmpeg
+RUN apk add --no-cache ffmpeg
+
 # Run the web service on container startup.
-CMD ["java","-jar","/app/target/yun-picture-backend-0.0.1-SNAPSHOT.jar","--spring.profiles.active=prod"]
+CMD ["java","-jar","/app/target/yun-file-backend-0.0.1-SNAPSHOT.jar","--spring.profiles.active=prod"]

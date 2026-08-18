@@ -10,6 +10,14 @@ import com.zzx.yunpicturebackend.constant.UserConstant;
 import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.manager.CosManager;
+import com.zzx.yunpicturebackend.manager.auth.SpaceUserPermissionConstant;
+import com.zzx.yunpicturebackend.manager.auth.annotation.SaSpaceCheckPermission;
+import com.zzx.yunpicturebackend.model.dto.picture.PictureUploadRequest;
+import com.zzx.yunpicturebackend.model.entity.User;
+import com.zzx.yunpicturebackend.model.vo.FileVO;
+import com.zzx.yunpicturebackend.model.vo.PictureVO;
+import com.zzx.yunpicturebackend.service.FileService;
+import com.zzx.yunpicturebackend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -17,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.IOException;
@@ -27,7 +36,10 @@ import java.io.IOException;
 public class FileController {
     @Resource
     CosManager cosManager;
-
+    @Resource
+    UserService userService;
+    @Resource
+    FileService fileService;
     /**
      * 测试文件上传
      *
@@ -92,5 +104,20 @@ public class FileController {
             }
         }
     }
+    /**
+     * 上传文件（可重新上传）
+     */
+    @PostMapping("/upload")
+    @SaSpaceCheckPermission(value = SpaceUserPermissionConstant.PICTURE_UPLOAD)
+    //@AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<FileVO> uploadPicture(
+            @RequestPart("file") MultipartFile multipartFile,
+            PictureUploadRequest pictureUploadRequest,
+            HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        FileVO pictureVO = fileService.uploadFile(multipartFile, pictureUploadRequest, loginUser);
+        return ResultUtils.success(pictureVO);
+    }
+
 
 }

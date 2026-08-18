@@ -1,6 +1,6 @@
 package com.zzx.yunpicturebackend.manager.auth.model;
 
-import com.zzx.yunpicturebackend.model.entity.Picture;
+import com.zzx.yunpicturebackend.model.entity.File;
 import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.SpaceUser;
 import lombok.Data;
@@ -35,7 +35,7 @@ public class SpaceUserAuthContext {
     /**
      * 图片信息
      */
-    private Picture picture;
+    private File file;
 
     /**
      * 空间信息

@@ -3,19 +3,24 @@ package com.zzx.yunpicturebackend.manager;
 import cn.hutool.core.io.FileUtil;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.exception.CosClientException;
-import com.qcloud.cos.model.COSObject;
-import com.qcloud.cos.model.GetObjectRequest;
-import com.qcloud.cos.model.PutObjectRequest;
-import com.qcloud.cos.model.PutObjectResult;
+import com.qcloud.cos.exception.CosServiceException;
+import com.qcloud.cos.model.*;
 import com.qcloud.cos.model.ciModel.persistence.PicOperations;
 import com.zzx.yunpicturebackend.config.CosClientConfig;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 import java.io.File;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
-
+import java.util.concurrent.TimeUnit;
+@Slf4j
 @Component
 public class CosManager {  
   
@@ -24,6 +29,13 @@ public class CosManager {
   
     @Resource  
     private COSClient cosClient;
+    private static final String UPLOAD_ID_PREFIX = "cos:upload:";
+
+    private static final long UPLOAD_ID_EXPIRE_SECONDS = 86400; // 24小时
+
+
+    @Resource
+    private RedisTemplate<String, String> redisTemplate;
   
     // ... 一些操作 COS 的方法
     /**
@@ -35,6 +47,7 @@ public class CosManager {
     public PutObjectResult putObject(String key, File file) {
         PutObjectRequest putObjectRequest = new PutObjectRequest(cosClientConfig.getBucket(), key,
                 file);
+
         return cosClient.putObject(putObjectRequest);
     }
 
@@ -94,5 +107,167 @@ public class CosManager {
     public void deleteObject(String key) throws CosClientException {
         cosClient.deleteObject(cosClientConfig.getBucket(), key);
     }
+    /**
+     * 判断对象是否存在
+     *
+     * @param bucketName 存储桶名称
+     * @param key        文件 key
+     * @return
+     */
+    public boolean doesObjectExist(String bucketName, String key)
+            throws CosClientException, CosServiceException {
+
+            return cosClient.doesObjectExist(bucketName, key);
+
+    }
+
+    /**
+     *
+     * 初始化分片上传(使用redis保证幂等性)
+     * @param key
+     * @return
+     * @throws CosClientException
+     * @throws CosServiceException
+     */
+    public String initiateMultipartUpload(String key) throws CosClientException, CosServiceException{
+
+        /**
+         * 幂等的初始化分片上传
+         *
+         * @param bucketName 存储桶名称
+         * @param key 对象键
+         * @param objectMetadata 对象元数据（仅在首次创建时生效）
+         * @return uploadId
+         */
+        // 生成幂等键
+        String idempotentKey = generateIdempotentKey(cosClientConfig.getBucket(), key);
+
+        // 1. 先检查Redis中是否已有uploadId
+        String cachedUploadId = redisTemplate.opsForValue().get(idempotentKey);
+        if (cachedUploadId != null && !cachedUploadId.isEmpty()) {
+            // 验证uploadId是否仍然有效
+            if (isUploadIdValid(cosClientConfig.getBucket(), key, cachedUploadId)) {
+                log.info("Reusing existing uploadId: {} for bucket: {}, key: {}",
+                        cachedUploadId, cosClientConfig.getBucket(), key);
+                return cachedUploadId;
+            } else {
+                // uploadId已失效，删除缓存
+                redisTemplate.delete(idempotentKey);
+                log.warn("UploadId {} is invalid, removed from cache", cachedUploadId);
+            }
+        }
+
+        // 2. 加分布式锁，防止并发初始化
+
+
+        // 3. 首次调用，创建新的uploadId
+        InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(cosClientConfig.getBucket(), key);
+
+
+        log.info("Creating new multipart upload for bucket: {}, key: {}", cosClientConfig.getBucket(), key);
+        InitiateMultipartUploadResult result = cosClient.initiateMultipartUpload(request);
+        String uploadId = result.getUploadId();
+
+        // 4. 缓存uploadId
+        redisTemplate.opsForValue().set(idempotentKey, uploadId,
+                UPLOAD_ID_EXPIRE_SECONDS, TimeUnit.SECONDS);
+
+        log.info("Created new uploadId: {} for bucket: {}, key: {}", uploadId, cosClientConfig.getBucket(), key);
+        return uploadId;
+
+    }
+// 分块上传的过程中，仅能通过初始化分块指定文件上传之后的 metadata
+// 需要的头部可以在这里指定
+//        ObjectMetadata objectMetadata = new ObjectMetadata();
+//        request.setObjectMetadata(objectMetadata);
+
+    /**
+     * 列出上传的分块信息
+     * @param key
+     * @param uploadId
+     * @return
+     * @throws CosClientException
+     * @throws CosServiceException
+     */
+
+    public PartListing listParts(String key,String uploadId)
+            throws CosClientException, CosServiceException{
+
+        ListPartsRequest listPartsRequest = new ListPartsRequest(cosClientConfig.getBucket(), key, uploadId);
+        return cosClient.listParts(listPartsRequest);
+    }
+
+    /**
+     * 上传分块
+     * @param key
+     * @param uploadId
+     * @param i
+     * @param file
+     * @return
+     * @throws CosClientException
+     * @throws CosServiceException
+     */
+    public UploadPartResult uploadPart(String key, String uploadId, int partNumber, File file, long offset, long partSize) throws CosClientException, CosServiceException{
+        UploadPartRequest uploadPartRequest = new UploadPartRequest();
+        uploadPartRequest.setBucketName(cosClientConfig.getBucket());
+        uploadPartRequest.setKey(key);
+        uploadPartRequest.setUploadId(uploadId);
+        uploadPartRequest.setFile(file);
+        uploadPartRequest.setPartNumber(partNumber);
+        uploadPartRequest.setFileOffset(offset);
+        uploadPartRequest.setPartSize(partSize);
+        return cosClient.uploadPart(uploadPartRequest);
+
+    }
+    /**
+     * 完成分片上传
+     * @param key
+     * @param uploadId
+     * @param partETags
+     * @return
+     * @throws CosClientException
+     * @throws CosServiceException
+     */
+    public String completeMultipartUpload(String key, String uploadId,List<PartETag> partETags) throws CosClientException, CosServiceException{
+        // 保存已上传的分片信息，实际情况里，这里的内容是从上传分块接口中获取到的
+
+
+// 分片上传结束后，调用 complete 完成分片上传
+        CompleteMultipartUploadRequest completeMultipartUploadRequest =
+                new CompleteMultipartUploadRequest(cosClientConfig.getBucket(), key, uploadId, partETags);
+        cosClient.completeMultipartUpload(completeMultipartUploadRequest);
+            return cosClientConfig.getHost()+"/" + key;
+
+
+
+    }
+/**
+ * 验证uploadId是否仍然有效
+ */
+private boolean isUploadIdValid(String bucketName, String key, String uploadId) {
+    try {
+        // 尝试列出已上传的分块，如果抛出异常说明uploadId无效
+        listParts(key, uploadId);
+        return true;
+    } catch (Exception e) {
+        log.warn("UploadId validation failed for bucket: {}, key: {}, uploadId: {}, error: {}",
+                bucketName, key, uploadId, e.getMessage());
+        return false;
+    }
+}
+
+/**
+ * 生成幂等键
+ */
+private String generateIdempotentKey(String bucketName, String key) {
+    return UPLOAD_ID_PREFIX + bucketName + ":" + key;
+}
+
+
+
+
+
+
+
 
 }

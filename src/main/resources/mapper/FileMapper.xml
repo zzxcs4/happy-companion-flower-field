@@ -2,20 +2,20 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.zzx.yunpicturebackend.mapper.PictureMapper">
+<mapper namespace="com.zzx.yunpicturebackend.mapper.FileMapper">
 
-    <resultMap id="BaseResultMap" type="com.zzx.yunpicturebackend.model.entity.Picture">
+    <resultMap id="BaseResultMap" type="com.zzx.yunpicturebackend.model.entity.File">
             <id property="id" column="id" />
             <result property="url" column="url" />
             <result property="name" column="name" />
             <result property="introduction" column="introduction" />
             <result property="category" column="category" />
             <result property="tags" column="tags" />
-            <result property="picSize" column="picSize" />
+            <result property="size" column="size" />
             <result property="picWidth" column="picWidth" />
             <result property="picHeight" column="picHeight" />
             <result property="picScale" column="picScale" />
-            <result property="picFormat" column="picFormat" />
+            <result property="format" column="format" />
             <result property="userId" column="userId" />
             <result property="createTime" column="createTime" />
             <result property="editTime" column="editTime" />
@@ -35,8 +35,8 @@
     isDelete,spaceId
     </sql>
     <select id="selectPicSizeBySpaceType" resultType="java.lang.Object">
-        SELECT p.picSize
-        FROM picture p
+        SELECT p.size
+        FROM file p
         LEFT JOIN space s ON p.spaceId = s.id
         <where>
             <!-- space.type=2 条件 -->

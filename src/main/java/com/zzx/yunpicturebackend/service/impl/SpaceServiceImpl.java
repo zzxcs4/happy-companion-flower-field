@@ -144,6 +144,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     @Override
     public SpaceVO getSpaceVO(Space space, HttpServletRequest request) {
+        if(space==null){
+            return null;
+        }
         // 对象转封装类
         SpaceVO spaceVO = SpaceVO.objToVo(space);
         // 关联查询用户信息

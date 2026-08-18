@@ -2,6 +2,10 @@ package com.zzx.yunpicturebackend.mapper;
 
 import com.zzx.yunpicturebackend.model.entity.Field;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+
+import java.util.List;
 
 /**
 * @author zzx
@@ -11,6 +15,16 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 */
 public interface FieldMapper extends BaseMapper<Field> {
 
+    /**
+     * 按实时帖子数降序查询花田（用于冷启动推荐降级）
+     */
+    @Select("SELECT f.* FROM field f " +
+            "LEFT JOIN post p ON p.fieldId = f.id " +
+            "WHERE f.isDelete = 0 " +
+            "GROUP BY f.id " +
+            "ORDER BY COUNT(p.id) DESC " +
+            "LIMIT #{topN}")
+    List<Field> selectTopFieldsByPostCount(@Param("topN") int topN);
 }
 
 

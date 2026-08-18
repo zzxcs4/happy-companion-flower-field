@@ -1,7 +1,7 @@
 package com.zzx.yunpicturebackend.model.vo;
 
 import cn.hutool.json.JSONUtil;
-import com.zzx.yunpicturebackend.model.entity.Picture;
+import com.zzx.yunpicturebackend.model.entity.File;
 import lombok.Data;
 import org.springframework.beans.BeanUtils;
 
@@ -112,35 +112,40 @@ public class PictureVO implements Serializable {
     /**  
      * 创建用户信息  
      */  
-    private UserVO user;  
-  
+    private UserVO user;
+
+    /**
+     * 视频时长
+     */
+    private  Integer duration;
+
     private static final long serialVersionUID = 1L;  
   
     /**  
      * 封装类转对象  
      */  
-    public static Picture voToObj(PictureVO pictureVO) {
+    public static File voToObj(PictureVO pictureVO) {
         if (pictureVO == null) {  
             return null;  
         }  
-        Picture picture = new Picture();  
-        BeanUtils.copyProperties(pictureVO, picture);
+        File file = new File();
+        BeanUtils.copyProperties(pictureVO, file);
         // 类型不同，需要转换  
-        picture.setTags(JSONUtil.toJsonStr(pictureVO.getTags()));
-        return picture;  
+        file.setTags(JSONUtil.toJsonStr(pictureVO.getTags()));
+        return file;
     }  
   
     /**  
      * 对象转封装类  
      */  
-    public static PictureVO objToVo(Picture picture) {  
-        if (picture == null) {  
+    public static PictureVO objToVo(File file) {
+        if (file == null) {
             return null;  
         }  
         PictureVO pictureVO = new PictureVO();  
-        BeanUtils.copyProperties(picture, pictureVO);  
+        BeanUtils.copyProperties(file, pictureVO);
         // 类型不同，需要转换  
-        pictureVO.setTags(JSONUtil.toList(picture.getTags(), String.class));  
+        pictureVO.setTags(JSONUtil.toList(file.getTags(), String.class));
         return pictureVO;  
     }  
 }

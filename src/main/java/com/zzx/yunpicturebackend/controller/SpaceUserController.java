@@ -1,56 +1,29 @@
 package com.zzx.yunpicturebackend.controller;
 
 import cn.hutool.core.util.ObjectUtil;
-import cn.hutool.core.util.RandomUtil;
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.zzx.yunpicturebackend.annotation.AuthCheck;
-import com.zzx.yunpicturebackend.api.aliyunai.AliYunAiApi;
-import com.zzx.yunpicturebackend.api.aliyunai.model.CreateOutPaintingTaskResponse;
-import com.zzx.yunpicturebackend.api.aliyunai.model.GetOutPaintingTaskResponse;
-import com.zzx.yunpicturebackend.api.imagesearch.ImageSearchApiFacade;
-import com.zzx.yunpicturebackend.api.imagesearch.model.ImageSearchResult;
 import com.zzx.yunpicturebackend.common.BaseResponse;
 import com.zzx.yunpicturebackend.common.DeleteRequest;
 import com.zzx.yunpicturebackend.common.ResultUtils;
-import com.zzx.yunpicturebackend.constant.UserConstant;
 import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.exception.ThrowUtils;
 import com.zzx.yunpicturebackend.manager.auth.SpaceUserPermissionConstant;
 import com.zzx.yunpicturebackend.manager.auth.annotation.SaSpaceCheckPermission;
-import com.zzx.yunpicturebackend.model.dto.picture.*;
 import com.zzx.yunpicturebackend.model.dto.spaceuser.SpaceUserAddRequest;
 import com.zzx.yunpicturebackend.model.dto.spaceuser.SpaceUserEditRequest;
 import com.zzx.yunpicturebackend.model.dto.spaceuser.SpaceUserQueryRequest;
-import com.zzx.yunpicturebackend.model.entity.Picture;
-import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.SpaceUser;
 import com.zzx.yunpicturebackend.model.entity.User;
-import com.zzx.yunpicturebackend.model.enums.PictureReviewStatusEnum;
-import com.zzx.yunpicturebackend.model.vo.PictureTagCategory;
-import com.zzx.yunpicturebackend.model.vo.PictureVO;
 import com.zzx.yunpicturebackend.model.vo.SpaceUserVO;
-import com.zzx.yunpicturebackend.service.PictureService;
-import com.zzx.yunpicturebackend.service.SpaceService;
 import com.zzx.yunpicturebackend.service.SpaceUserService;
 import com.zzx.yunpicturebackend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.util.DigestUtils;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/spaceUser")

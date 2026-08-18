@@ -4,7 +4,7 @@ import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
 import com.zzx.yunpicturebackend.manager.auth.SpaceUserAuthManager;
 import com.zzx.yunpicturebackend.manager.auth.SpaceUserPermissionConstant;
-import com.zzx.yunpicturebackend.model.entity.Picture;
+import com.zzx.yunpicturebackend.model.entity.File;
 import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.zzx.yunpicturebackend.model.enums.SpaceTypeEnum;
@@ -56,12 +56,12 @@ public class WsHandshakeInterceptor implements HandshakeInterceptor {
                 return false;
             }
             // 校验用户是否有该图片的权限
-            Picture picture = pictureService.getById(pictureId);
-            if (picture == null) {
+            File file = pictureService.getById(pictureId);
+            if (file == null) {
                 log.error("图片不存在，拒绝握手");
                 return false;
             }
-            Long spaceId = picture.getSpaceId();
+            Long spaceId = file.getSpaceId();
             Space space = null;
             if (spaceId != null) {
                 space = spaceService.getById(spaceId);
@@ -74,7 +74,7 @@ public class WsHandshakeInterceptor implements HandshakeInterceptor {
                     return false;
                 }
             }
-            List<String> permissionList = spaceUserAuthManager.getPermissionList( picture,space, loginUser);
+            List<String> permissionList = spaceUserAuthManager.getPermissionList(file,space, loginUser);
             if (!permissionList.contains(SpaceUserPermissionConstant.PICTURE_EDIT)) {
                 log.error("没有图片编辑权限，拒绝握手");
                 return false;

@@ -6,13 +6,15 @@ import java.io.Serializable;
 import java.util.Date;
 import lombok.Data;
 
+import javax.annotation.Nullable;
+
 /**
  * 图片
  * @TableName picture
  */
-@TableName(value ="picture")
+@TableName(value ="file")
 @Data
-public class Picture implements Serializable {
+public class File implements Serializable {
     /**
      * id
      */
@@ -52,31 +54,35 @@ public class Picture implements Serializable {
     /**
      * 图片体积
      */
-    private Long picSize;
+    private Long size;
 
     /**
      * 图片宽度
      */
+   @Nullable
     private Integer picWidth;
 
     /**
      * 图片高度
      */
+   @Nullable
     private Integer picHeight;
 
     /**
      * 图片宽高比例
      */
+   @Nullable
     private Double picScale;
 
     /**
-     * 图片格式
+     * 文件格式
      */
-    private String picFormat;
+    private String format;
 
     /**
      * 图片主色调
      */
+   @Nullable
     private String picColor;
 
 
@@ -134,4 +140,10 @@ public class Picture implements Serializable {
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
+   @Nullable
+    private  String coverUrl;
+   @Nullable
+    private  Integer duration;
+   @Nullable
+    private  String fileType;
 }

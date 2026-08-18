@@ -13,7 +13,7 @@ import cn.hutool.json.JSONUtil;
 import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.manager.auth.model.SpaceUserAuthContext;
-import com.zzx.yunpicturebackend.model.entity.Picture;
+import com.zzx.yunpicturebackend.model.entity.File;
 import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.SpaceUser;
 import com.zzx.yunpicturebackend.model.entity.User;
@@ -156,17 +156,17 @@ public class StpInterfaceImpl implements StpInterface {
             if (pictureId == null) {
                 return ADMIN_PERMISSIONS;
             }
-            Picture picture = pictureService.lambdaQuery()
-                    .eq(Picture::getId, pictureId)
-                    .select(Picture::getId, Picture::getSpaceId, Picture::getUserId)
+            File file = pictureService.lambdaQuery()
+                    .eq(File::getId, pictureId)
+                    .select(File::getId, File::getSpaceId, File::getUserId)
                     .one();
-            if (picture == null) {
+            if (file == null) {
                 throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "未找到图片信息");
             }
-            spaceId = picture.getSpaceId();
+            spaceId = file.getSpaceId();
             // 公共图库，仅本人或管理员可操作
             if (spaceId == null) {
-                if (picture.getUserId().equals(userId) || userService.isAdmin(loginUser)) {
+                if (file.getUserId().equals(userId) || userService.isAdmin(loginUser)) {
                     return ADMIN_PERMISSIONS;
                 } else {
                     // 不是自己的图片，仅可查看

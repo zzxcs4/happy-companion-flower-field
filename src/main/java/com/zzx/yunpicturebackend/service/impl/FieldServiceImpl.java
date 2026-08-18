@@ -21,15 +21,20 @@ import com.zzx.yunpicturebackend.model.dto.field.FieldQuitRequest;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceAddRequest;
 import com.zzx.yunpicturebackend.model.entity.Field;
 import com.zzx.yunpicturebackend.model.entity.Space;
+import com.zzx.yunpicturebackend.model.entity.SpaceUser;
 import com.zzx.yunpicturebackend.model.entity.UserField;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.zzx.yunpicturebackend.model.enums.FieldStatusEnum;
+import com.zzx.yunpicturebackend.model.enums.SpaceLevelEnum;
+import com.zzx.yunpicturebackend.model.enums.SpaceRoleEnum;
+import com.zzx.yunpicturebackend.model.enums.SpaceTypeEnum;
 import com.zzx.yunpicturebackend.model.vo.FieldUserVO;
 import com.zzx.yunpicturebackend.model.vo.UserVO;
 import com.zzx.yunpicturebackend.service.*;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -59,6 +64,11 @@ public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
     private PostService postService;
     @Resource
     private RedissonClient redissonClient;
+    @Resource
+    @Lazy
+    private UserFieldScoreService userFieldScoreService;
+    @Resource
+    private SpaceUserService spaceUserService;
     @Override
     public long addField(FieldAddRequest fieldAddRequest, User loginUser) {
         // 在此处将实体类和 DTO 进行转换
@@ -83,9 +93,17 @@ public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
 
 
                 //如果创建花田时没有图库空间，默认创建。
+                // 公开花田（status=0）使用花田空间（无限制），私有/加密花田使用团队空间（有容量限制）
                 SpaceAddRequest sr = new SpaceAddRequest();
-                sr.setSpaceType(2);
-                sr.setSpaceName(fieldAddRequest.getName()+"的图片空间"+loginUser.getUserName());
+                if (field.getStatus() != null && field.getStatus() != 0) {
+                    // 私有(1)或加密(2)花田 -> 团队空间，有容量限制
+                    sr.setSpaceType(SpaceTypeEnum.TEAM.getValue());
+                    sr.setSpaceLevel(SpaceLevelEnum.COMMON.getValue());
+                } else {
+                    // 公开花田 -> 花田空间，无限制
+                    sr.setSpaceType(SpaceTypeEnum.FIELD.getValue());
+                }
+                sr.setSpaceName(fieldAddRequest.getName()+"的空间"+loginUser.getUserName());
 
                 long SpaceId = spaceService.addSpace(sr, loginUser);
                 field.setSpaceId(SpaceId);
@@ -247,6 +265,7 @@ public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
 
             BeanUtils.copyProperties(Field, fieldUserVO);
             fieldUserVO.setPostNum(postService.query().eq("fieldId",Field.getId()).count().intValue());
+            // postNum 已由 savePost/deletePost 维护，直接使用数据库字段
             // 脱敏用户信息
             if (user != null) {
                 UserVO userVO = new UserVO();
@@ -341,7 +360,31 @@ public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
                     userField.setUserId(userId);
                     userField.setFieldId(FieldId);
                     userField.setJoinTime(new Date());
-                    return userFieldService.save(userField);
+                    boolean saved = userFieldService.save(userField);
+                    // 加入花田 +1 分
+                    if (saved) {
+                        userFieldScoreService.addScore(userId, FieldId, 1.0);
+                        
+                        // 同时加入社区空间，权限为浏览者
+                        Long spaceId = Field.getSpaceId();
+                        if (spaceId != null && spaceId > 0) {
+                            // 检查是否已经存在于空间中
+                            QueryWrapper<SpaceUser> spaceUserQueryWrapper = new QueryWrapper<>();
+                            spaceUserQueryWrapper.eq("spaceId", spaceId);
+                            spaceUserQueryWrapper.eq("userId", userId);
+                            long existCount = spaceUserService.count(spaceUserQueryWrapper);
+                            
+                            if (existCount == 0) {
+                                // 添加到空间，角色为浏览者
+                                SpaceUser spaceUser = new SpaceUser();
+                                spaceUser.setSpaceId(spaceId);
+                                spaceUser.setUserId(userId);
+                                spaceUser.setSpaceRole(SpaceRoleEnum.VIEWER.getValue());
+                                spaceUserService.save(spaceUser);
+                            }
+                        }
+                    }
+                    return saved;
                 }
             }
         } catch (InterruptedException e) {
@@ -401,7 +444,29 @@ public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
                     userField.setUserId(userId);
                     userField.setFieldId(FieldId);
                     userField.setJoinTime(new Date());
-                    return userFieldService.save(userField);
+                    boolean saved = userFieldService.save(userField);
+                    
+                    // 同时加入社区空间，权限为浏览者
+                    if (saved) {
+                        Long spaceId = Field.getSpaceId();
+                        if (spaceId != null && spaceId > 0) {
+                            // 检查是否已经存在于空间中
+                            QueryWrapper<SpaceUser> spaceUserQueryWrapper = new QueryWrapper<>();
+                            spaceUserQueryWrapper.eq("spaceId", spaceId);
+                            spaceUserQueryWrapper.eq("userId", userId);
+                            long existCount = spaceUserService.count(spaceUserQueryWrapper);
+                            
+                            if (existCount == 0) {
+                                // 添加到空间，角色为浏览者
+                                SpaceUser spaceUser = new SpaceUser();
+                                spaceUser.setSpaceId(spaceId);
+                                spaceUser.setUserId(userId);
+                                spaceUser.setSpaceRole(SpaceRoleEnum.VIEWER.getValue());
+                                spaceUserService.save(spaceUser);
+                            }
+                        }
+                    }
+                    return saved;
                 }
             }
         } catch (InterruptedException e) {
@@ -461,8 +526,22 @@ public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
                 }
             }
         }
-        // 移除关系
-        return userFieldService.remove(queryWrapper);
+        // 移除花田关系
+        boolean result = userFieldService.remove(queryWrapper);
+        
+        // 同时移除社区空间关系
+        if (result) {
+            Long spaceId = Field.getSpaceId();
+            if (spaceId != null && spaceId > 0) {
+                // 查询并删除空间用户关系
+                QueryWrapper<SpaceUser> spaceUserQueryWrapper = new QueryWrapper<>();
+                spaceUserQueryWrapper.eq("spaceId", spaceId);
+                spaceUserQueryWrapper.eq("userId", userId);
+                spaceUserService.remove(spaceUserQueryWrapper);
+            }
+        }
+        
+        return result;
     }
 
     @Override

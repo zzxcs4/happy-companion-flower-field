@@ -77,6 +77,26 @@ public class UserController {
     }
 
     /**
+     * 签到
+     * @param request
+     * @param spaceId
+     * @return
+     */
+    @PostMapping("/sign")
+    public BaseResponse<Boolean> sign(HttpServletRequest request,Long spaceId){
+        return userService.sign(request,spaceId) ;
+    }
+    /**
+     * 获取用户签到数
+     * @param request
+     * @param spaceId
+     * @return
+     */
+    @GetMapping("/sign/count")
+    public BaseResponse<Integer> signCount(HttpServletRequest request,Long spaceId){
+        return userService.signCount(request,spaceId);
+    }
+    /**
      * 获取登录用户
      * @param request
      * @return

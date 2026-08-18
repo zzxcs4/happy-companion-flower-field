@@ -14,6 +14,7 @@ import com.zzx.yunpicturebackend.model.entity.Post;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.zzx.yunpicturebackend.service.CommentService;
 import com.zzx.yunpicturebackend.service.PostService;
+import com.zzx.yunpicturebackend.service.UserFieldScoreService;
 import com.zzx.yunpicturebackend.service.UserService;
 import jodd.util.StringUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,8 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
     private UserService userService;
     @Resource
     private PostService postService;
+    @Resource
+    private UserFieldScoreService userFieldScoreService;
 
     @Override
     public BaseResponse<List<Comment>> findAllComments(Long pid) {
@@ -56,9 +59,12 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
         comment.setUpdateTime(new Date());
         Post post = postService.getById(comment.getPost());
         post.setComments(post.getComments() + 1);
-        //headline.setPageViews(0);
         postService.updateById(post);
         commentMapper.insert(comment);
+        // 评论 +0.34 分（3次约 +1 分）
+        if (comment.getPublisher() != null && post.getFieldId() != null) {
+            userFieldScoreService.addScore(comment.getPublisher(), post.getFieldId(), 0.34);
+        }
         return ResultUtils.success(true);
     }
 

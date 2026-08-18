@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.yuque.com)",
+      "Bash(ls D:/JavaProject/happy-companion-flower-field/*.md)",
+      "Bash(git checkout:*)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c ' *)",
+      "Bash(python *)",
+      "Bash(where python *)",
+      "Bash(ls -la *.md)"
+    ]
+  }
+}

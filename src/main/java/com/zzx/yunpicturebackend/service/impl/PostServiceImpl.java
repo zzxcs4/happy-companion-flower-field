@@ -16,11 +16,8 @@ import com.zzx.yunpicturebackend.model.dto.user.UserUpdateRequest;
 import com.zzx.yunpicturebackend.model.entity.*;
 import com.zzx.yunpicturebackend.model.enums.FieldStatusEnum;
 import com.zzx.yunpicturebackend.model.vo.ScrollVO;
-import com.zzx.yunpicturebackend.service.FieldService;
-import com.zzx.yunpicturebackend.service.IFollowService;
-import com.zzx.yunpicturebackend.service.PostService;
+import com.zzx.yunpicturebackend.service.*;
 import com.zzx.yunpicturebackend.mapper.PostMapper;
-import com.zzx.yunpicturebackend.service.UserService;
 import jodd.util.StringUtil;
 import org.springframework.beans.BeanUtils;
 import org.springframework.context.annotation.Lazy;
@@ -57,6 +54,12 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     private StringRedisTemplate stringRedisTemplate;
     @Resource
     private IFollowService followService;
+    @Resource
+    private UserFieldScoreService userFieldScoreService;
+    @Resource
+    private UserFieldService userFieldService;
+    @Resource
+    private PictureService pictureService;
     @Override
     public BaseResponse<Long> savePost(Post post, HttpServletRequest request) {
         //1.获取登录用户
@@ -66,6 +69,12 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         boolean isSuccess = save(post);
         if(!isSuccess){
             throw new BusinessException(ErrorCode.OPERATION_ERROR);
+        }
+        // 发帖 +0.34 分（3次约 +1 分）
+        if (post.getFieldId() != null) {
+            userFieldScoreService.addScore(loginUser.getId(), post.getFieldId(), 0.34);
+            // 更新花田帖子数 +1
+           // fieldService.update().setSql("postNum = postNum + 1").eq("id", post.getFieldId()).update();
         }
         //3.查询笔记作者的所有粉丝 select * from tb_follow where follow_user=userId
         List<Follow> follows = followService.query().eq("follow_user_id", loginUser.getId()).list();
@@ -93,6 +102,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             //3.2保存用户到Redis的set集合 zadd key value score
             if(isSuccess){
                 stringRedisTemplate.opsForZSet().add(key,loginUserId.toString(),System.currentTimeMillis());
+                // 点赞 +0.2 分（5次约 +1 分）
+                Post likedPost = getById(id);
+                if (likedPost != null && likedPost.getFieldId() != null) {
+                    userFieldScoreService.addScore(loginUserId, likedPost.getFieldId(), 0.2);
+                }
             }
         }else{
             //4.如果已点赞，取消点赞
@@ -158,7 +172,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         //2.查询收件箱
         String key=FEED_KEY+userId;
         Set<ZSetOperations.TypedTuple<String>> typedTuples = stringRedisTemplate.opsForZSet()
-                .reverseRangeByScoreWithScores(key, 0, max, offset, 3);
+                .reverseRangeByScoreWithScores(key, 0, max, offset, 10);
         //3.非空判断
         if(typedTuples==null||typedTuples.isEmpty()){
             return ResultUtils.success(null);
@@ -233,21 +247,43 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Override
     public boolean deletePost(long id, User loginUser) {
-        // 校验花田是否存在
+        // 校验帖子是否存在
         Post post = getPostById(id);
         long postId = post.getId();
-        // 校验你是不是帖子的创建人,后面这句话为什么不行Field.getUserId() != loginUser.getId()
+        // 校验你是不是帖子的创建人
         if (!Objects.equals(post.getUserId(), loginUser.getId())) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
-        // 移除所有加入队伍的关联信息
-//        QueryWrapper<UserField> userFieldQueryWrapper = new QueryWrapper<>();
-//        userFieldQueryWrapper.eq("fieldId", postId);
-//        boolean result = userFieldService.remove(userFieldQueryWrapper);
-//        if (!result) {
-//            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "删除花田关联信息失败");
-//        }
-        // 删除队伍
+        
+        // 删除帖子关联的图片资源
+        String images = post.getImages();
+        if (StrUtil.isNotBlank(images)) {
+            // 分割图片URL（多张图片以逗号分隔）
+            String[] imageUrlArray = images.split(",");
+            for (String imageUrl : imageUrlArray) {
+                if (StrUtil.isBlank(imageUrl)) {
+                    continue;
+                }
+                try {
+                    // 根据URL查询图片记录
+                    QueryWrapper<File> fileQueryWrapper = new QueryWrapper<>();
+                    fileQueryWrapper.eq("url", imageUrl.trim());
+                    File file = pictureService.getOne(fileQueryWrapper);
+                    
+                    if (file != null) {
+                        // 删除图片（会自动清理空间资源和COS文件）
+                        pictureService.deletePicture(file.getId(), loginUser);
+                        // 异步清理文件
+                        pictureService.clearPictureFile(file);
+                    }
+                } catch (Exception e) {
+                    // 记录错误但不影响帖子删除
+                    e.printStackTrace();
+                }
+            }
+        }
+        
+        // 删除帖子
         return this.removeById(postId);
     }
 

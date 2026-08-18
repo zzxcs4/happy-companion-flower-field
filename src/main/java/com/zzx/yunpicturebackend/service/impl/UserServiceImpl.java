@@ -7,6 +7,8 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.zzx.yunpicturebackend.common.BaseResponse;
+import com.zzx.yunpicturebackend.common.ResultUtils;
 import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.exception.ThrowUtils;
@@ -16,13 +18,10 @@ import com.zzx.yunpicturebackend.manager.upload.PictureUploadTemplate;
 import com.zzx.yunpicturebackend.model.dto.file.UploadPictureResult;
 import com.zzx.yunpicturebackend.model.dto.user.UserAvatarUploadRequest;
 import com.zzx.yunpicturebackend.model.dto.user.UserQueryRequest;
-import com.zzx.yunpicturebackend.model.entity.Picture;
-import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.zzx.yunpicturebackend.mapper.UserMapper;
 import com.zzx.yunpicturebackend.model.enums.UserRoleEnum;
 import com.zzx.yunpicturebackend.model.vo.LoginUserVO;
-import com.zzx.yunpicturebackend.model.vo.PictureVO;
 import com.zzx.yunpicturebackend.model.vo.UserVO;
 import com.zzx.yunpicturebackend.service.UserService;
 import com.zzx.yunpicturebackend.utils.AlgorithmUtils;
@@ -31,17 +30,21 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.connection.BitFieldSubCommands;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.util.CollectionUtils;
 import org.springframework.util.DigestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.zzx.yunpicturebackend.constant.RedisConstants.USER_SIGN_KEY;
 import static com.zzx.yunpicturebackend.constant.UserConstant.USER_LOGIN_STATE;
 
 /**
@@ -53,7 +56,8 @@ import static com.zzx.yunpicturebackend.constant.UserConstant.USER_LOGIN_STATE;
 @Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     implements UserService {
-
+    @Resource
+    private RedisTemplate<String,Object> redisTemplate;
     @Resource
     private FilePictureUpload filePictureUpload;
 
@@ -115,7 +119,56 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
         return currentUser;
     }
+    @Override
+    public BaseResponse<Boolean> sign(HttpServletRequest request, Long spaceId) {
+        //1.获取当前登录用户
+        Long userId = getLoginUser( request).getId();
+        //2.获取日期
+        LocalDateTime now = LocalDateTime.now();
+        //3.拼接key
+        String keySuffix = now.format(DateTimeFormatter.ofPattern(":yyyyMM"));
+        String key = USER_SIGN_KEY+spaceId+userId+keySuffix;
+        //4.获取今天是本月的第几天
+        int dayOfMonth = now.getDayOfMonth();
+        //5.写入Redis
+        redisTemplate.opsForValue().setBit(key,dayOfMonth-1,true);
 
+        return ResultUtils.success(true);
+    }
+
+    @Override
+    public BaseResponse<Integer> signCount(HttpServletRequest request,Long spaceId) {
+        //1.获取本月截至今天为止所以的签到记录
+        //1.获取当前登录用户
+        Long userId = getLoginUser( request).getId();
+        //2.获取日期
+        LocalDateTime now = LocalDateTime.now();
+        //3.拼接key
+        String keySuffix = now.format(DateTimeFormatter.ofPattern(":yyyyMM"));
+        String key = USER_SIGN_KEY+spaceId+userId+keySuffix;
+        //4.获取今天是本月的第几天
+        int dayOfMonth = now.getDayOfMonth();
+        //5.获取本月截至今天为止所有的签到记录
+        List<Long> result = redisTemplate.opsForValue().bitField(key, BitFieldSubCommands.create()
+                .get(BitFieldSubCommands.BitFieldType.unsigned(dayOfMonth)).valueAt(0));
+        if(result==null||result.isEmpty()){
+            return ResultUtils.success(0);
+        }
+        Long num=result.get(0);
+        if(num==null||num==0){
+            return ResultUtils.success(0);
+        }
+        int count=0;
+        while (true){
+            if((num & 1)==0){
+                break;
+            }else {
+                count++;
+            }
+            num>>>=1;
+        }
+        return ResultUtils.success(count);
+    }
     @Override
     public LoginUserVO userLogin(String userAccount, String userPassword, HttpServletRequest request) {
         // 1. 校验

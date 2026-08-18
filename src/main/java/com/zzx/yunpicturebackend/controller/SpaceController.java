@@ -1,6 +1,5 @@
 package com.zzx.yunpicturebackend.controller;
 
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zzx.yunpicturebackend.annotation.AuthCheck;
 import com.zzx.yunpicturebackend.common.BaseResponse;
@@ -11,19 +10,13 @@ import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.exception.ThrowUtils;
 import com.zzx.yunpicturebackend.manager.auth.SpaceUserAuthManager;
-import com.zzx.yunpicturebackend.model.dto.picture.PictureEditRequest;
-import com.zzx.yunpicturebackend.model.dto.picture.PictureQueryRequest;
-import com.zzx.yunpicturebackend.model.dto.picture.PictureUploadRequest;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceAddRequest;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceEditRequest;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceQueryRequest;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceUpdateRequest;
-import com.zzx.yunpicturebackend.model.entity.Picture;
 import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.User;
-import com.zzx.yunpicturebackend.model.enums.PictureReviewStatusEnum;
 import com.zzx.yunpicturebackend.model.enums.SpaceLevelEnum;
-import com.zzx.yunpicturebackend.model.vo.PictureVO;
 import com.zzx.yunpicturebackend.model.vo.SpaceLevel;
 import com.zzx.yunpicturebackend.model.vo.SpaceVO;
 import com.zzx.yunpicturebackend.service.SpaceService;
@@ -31,7 +24,6 @@ import com.zzx.yunpicturebackend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -181,7 +173,7 @@ public class SpaceController {
         ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
         // 查询数据库
         Space space = spaceService.getById(id);
-        ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR);
+        //ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR);
         SpaceVO spaceVO = spaceService.getSpaceVO(space, request);
         User loginUser = userService.getLoginUser(request);
         List<String> permissionList = spaceUserAuthManager.getPermissionList(null,space, loginUser);
@@ -193,8 +185,7 @@ public class SpaceController {
     /**
      * 分页获取空间列表（封装类）
      */
-    @PostMapping("/list/page/vo")
-    public BaseResponse<Page<SpaceVO>> listSpaceVOByPage(@RequestBody SpaceQueryRequest spaceQueryRequest,
+    @PostMapping("/list/page/vo")    public BaseResponse<Page<SpaceVO>> listSpaceVOByPage(@RequestBody SpaceQueryRequest spaceQueryRequest,
                                                              HttpServletRequest request) {
         long current = spaceQueryRequest.getCurrent();
         long size = spaceQueryRequest.getPageSize();

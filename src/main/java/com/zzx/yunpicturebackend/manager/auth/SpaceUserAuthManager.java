@@ -5,7 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.zzx.yunpicturebackend.manager.auth.model.SpaceUserAuthConfig;
 import com.zzx.yunpicturebackend.manager.auth.model.SpaceUserRole;
-import com.zzx.yunpicturebackend.model.entity.Picture;
+import com.zzx.yunpicturebackend.model.entity.File;
 import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.SpaceUser;
 import com.zzx.yunpicturebackend.model.entity.User;
@@ -53,7 +53,7 @@ public class SpaceUserAuthManager {
         List<String> permissions = role.getPermissions();
         return permissions;
     }
-    public List<String> getPermissionList(Picture picture, Space space, User loginUser) {
+    public List<String> getPermissionList(File file, Space space, User loginUser) {
         if (loginUser == null) {
             return new ArrayList<>();
         }
@@ -61,7 +61,7 @@ public class SpaceUserAuthManager {
         List<String> ADMIN_PERMISSIONS = getPermissionsByRole(SpaceRoleEnum.ADMIN.getValue());
         // 公共图库
         if (space == null) {
-            if (userService.isAdmin(loginUser)||picture.getUserId().equals(loginUser.getId())) {
+            if (userService.isAdmin(loginUser)|| file.getUserId().equals(loginUser.getId())) {
                 return ADMIN_PERMISSIONS;
             }
             return new ArrayList<>();

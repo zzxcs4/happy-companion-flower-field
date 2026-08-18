@@ -5,17 +5,17 @@
 <mapper namespace="com.zzx.yunpicturebackend.mapper.UserFieldMapper">
 
     <resultMap id="BaseResultMap" type="com.zzx.yunpicturebackend.model.entity.UserField">
-            <id property="id" column="id" />
-            <result property="userId" column="userId" />
-            <result property="fieldId" column="fieldId" />
-            <result property="joinTime" column="joinTime" />
-            <result property="createTime" column="createTime" />
-            <result property="updateTime" column="updateTime" />
-            <result property="isDelete" column="isDelete" />
+        <id property="id" column="id" />
+        <result property="userId" column="user_id" />
+        <result property="fieldId" column="field_id" />
+        <result property="joinTime" column="join_time" />
+        <result property="createTime" column="create_time" />
+        <result property="updateTime" column="update_time" />
+        <result property="isDelete" column="is_delete" />
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,userId,fieldId,joinTime,createTime,updateTime,
-        isDelete
+        id,user_id,field_id,join_time,create_time,update_time,
+        is_delete
     </sql>
 </mapper>

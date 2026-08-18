@@ -1,6 +1,7 @@
 package com.zzx.yunpicturebackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.zzx.yunpicturebackend.common.BaseResponse;
 import com.zzx.yunpicturebackend.model.dto.user.UserAvatarUploadRequest;
 import com.zzx.yunpicturebackend.model.dto.user.UserQueryRequest;
 import com.zzx.yunpicturebackend.model.entity.User;
@@ -29,6 +30,10 @@ public interface UserService extends IService<User> {
     long userRegister(String userAccount, String userPassword, String checkPassword);
 
     User getLoginUser(HttpServletRequest request);
+
+    BaseResponse<Boolean> sign(HttpServletRequest request, Long spaceId);
+
+    BaseResponse<Integer> signCount(HttpServletRequest request,Long spaceId);
 
     /**
      * 用户登录
