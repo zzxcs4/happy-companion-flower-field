@@ -1,17 +1,24 @@
 package com.zzx.yunpicturebackend.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.zzx.yunpicturebackend.constant.RedisConstants;
 import com.zzx.yunpicturebackend.mapper.FieldMapper;
 import com.zzx.yunpicturebackend.model.entity.Field;
 import com.zzx.yunpicturebackend.model.entity.UserFieldScore;
 import com.zzx.yunpicturebackend.service.FieldService;
 import com.zzx.yunpicturebackend.service.RecommendService;
 import com.zzx.yunpicturebackend.service.UserFieldScoreService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -26,7 +33,9 @@ import java.util.stream.Collectors;
  * </ol>
  */
 @Service
-public class RecommendServiceImpl implements RecommendService {
+public class RecommendServiceImpl implements RecommendService, RedisConstants {
+
+    private static final Logger log = LoggerFactory.getLogger(RecommendServiceImpl.class);
 
     @Resource
     private UserFieldScoreService userFieldScoreService;
@@ -34,6 +43,22 @@ public class RecommendServiceImpl implements RecommendService {
     private FieldService fieldService;
     @Autowired
     private FieldMapper fieldMapper;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
+    /**
+     * L1 本地缓存（Caffeine）：存储推荐花田 ID 列表
+     * 策略：仅依赖 TTL 自动过期，不做主动清除
+     * - maximumSize: 最多缓存 1000 个用户的推荐结果
+     * - expireAfterWrite: 10 分钟自动过期
+     */
+    private final Cache<String, List<Long>> localCache = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .expireAfterWrite(10, TimeUnit.MINUTES)
+            .build();
+
+    /** L2 分布式缓存（Redis）TTL：15 分钟 */
+    private static final long REDIS_CACHE_TTL_MINUTES = 15;
 
     // -------------------------------------------------------------------------
     // 公共接口
@@ -41,11 +66,61 @@ public class RecommendServiceImpl implements RecommendService {
 
     @Override
     public List<Field> recommendFields(Long userId, int topN) {
+        String cacheKey = RECOMMEND_FIELDS_KEY + userId + ":" + topN;
+
+        // ===== L1: Caffeine 本地缓存 =====
+        List<Long> cachedIds = localCache.getIfPresent(cacheKey);
+        if (cachedIds != null) {
+            log.debug("[推荐缓存] L1 命中, userId={}", userId);
+            return buildFieldsFromIds(cachedIds);
+        }
+
+        // ===== L2: Redis 分布式缓存 =====
+        List<Long> redisIds = getFromRedis(cacheKey);
+        if (redisIds != null) {
+            log.debug("[推荐缓存] L2 命中, userId={}", userId);
+            localCache.put(cacheKey, redisIds); // 回填 L1
+            return buildFieldsFromIds(redisIds);
+        }
+
+        // ===== Cache Miss: 执行协同过滤计算 =====
+        log.debug("[推荐缓存] Miss, 执行计算, userId={}", userId);
+        List<Long> recommendFieldIds = computeRecommendation(userId, topN);
+
+        if (recommendFieldIds != null && !recommendFieldIds.isEmpty()) {
+            // 写入双层缓存
+            localCache.put(cacheKey, recommendFieldIds);
+            putToRedis(cacheKey, recommendFieldIds);
+        }
+
+        return buildFieldsFromIds(recommendFieldIds);
+    }
+
+    /**
+     * 根据花田 ID 列表查询 Field 实体并保持顺序
+     */
+    private List<Field> buildFieldsFromIds(List<Long> fieldIds) {
+        if (fieldIds == null || fieldIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Field> fields = fieldService.listByIds(fieldIds);
+        Map<Long, Field> fieldMap = fields.stream()
+                .collect(Collectors.toMap(Field::getId, f -> f));
+        return fieldIds.stream()
+                .filter(fieldMap::containsKey)
+                .map(fieldMap::get)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 核心协同过滤计算（无缓存）
+     */
+    private List<Long> computeRecommendation(Long userId, int topN) {
         // 1. 构造数据集：所有 (userId, fieldId, score) 记录
         List<UserFieldScore> allScores = userFieldScoreService.list();
         if (allScores == null || allScores.isEmpty()) {
-            //return Collections.emptyList();
-            return fallbackHotFields(topN);
+            List<Field> hotFields = fallbackHotFields(topN);
+            return hotFields.stream().map(Field::getId).collect(Collectors.toList());
         }
 
         // 2. 转换为 Map<userId, Map<fieldId, score>>
@@ -53,39 +128,56 @@ public class RecommendServiceImpl implements RecommendService {
 
         // 如果目标用户在数据集中没有任何评分记录，返回全局热门花田
         if (!dataset.containsKey(userId)) {
-            return fallbackHotFields(topN);
+            List<Field> hotFields = fallbackHotFields(topN);
+            return hotFields.stream().map(Field::getId).collect(Collectors.toList());
         }
 
         // 3. 计算皮尔森系数，选出相关性最强的最近邻用户
         Long nearestNeighborId = findNearestNeighbor(userId, dataset);
         if (nearestNeighborId == null) {
-            return fallbackHotFields(topN);
+            List<Field> hotFields = fallbackHotFields(topN);
+            return hotFields.stream().map(Field::getId).collect(Collectors.toList());
         }
 
         // 4. 取出 "最近邻评分过 但目标用户没涉及过" 的花田id
         Set<Long> targetFieldIds = dataset.get(userId).keySet();
         Map<Long, Double> neighborScores = dataset.get(nearestNeighborId);
 
-        List<Long> recommendFieldIds = neighborScores.entrySet().stream()
-                .filter(e -> !targetFieldIds.contains(e.getKey()))   // 目标用户未涉及
-                .sorted(Map.Entry.<Long, Double>comparingByValue().reversed()) // 按邻居评分降序
+        return neighborScores.entrySet().stream()
+                .filter(e -> !targetFieldIds.contains(e.getKey()))
+                .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
                 .limit(topN)
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList());
+    }
 
-        if (recommendFieldIds.isEmpty()) {
-            return fallbackHotFields(topN);
+    // ===== Redis 缓存操作 =====
+
+    private List<Long> getFromRedis(String key) {
+        try {
+            String json = stringRedisTemplate.opsForValue().get(key);
+            if (json != null && !json.isEmpty()) {
+                // JSON 格式: [1,2,3]
+                return Arrays.stream(json.replaceAll("[\\[\\]\\s]", "").split(","))
+                        .filter(s -> !s.isEmpty())
+                        .map(Long::parseLong)
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception e) {
+            log.warn("[推荐缓存] Redis 读取失败: {}", e.getMessage());
         }
+        return null;
+    }
 
-        // 5. 查询花田详情并按推荐顺序返回
-        List<Field> fields = fieldService.listByIds(recommendFieldIds);
-        // 按推荐顺序排序（listByIds 不保证顺序）
-        Map<Long, Field> fieldMap = fields.stream()
-                .collect(Collectors.toMap(Field::getId, f -> f));
-        return recommendFieldIds.stream()
-                .filter(fieldMap::containsKey)
-                .map(fieldMap::get)
-                .collect(Collectors.toList());
+    private void putToRedis(String key, List<Long> fieldIds) {
+        try {
+            String json = fieldIds.stream()
+                    .map(String::valueOf)
+                    .collect(Collectors.joining(",", "[", "]"));
+            stringRedisTemplate.opsForValue().set(key, json, REDIS_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+        } catch (Exception e) {
+            log.warn("[推荐缓存] Redis 写入失败: {}", e.getMessage());
+        }
     }
 
     // -------------------------------------------------------------------------

@@ -13,4 +13,14 @@ public interface UserFieldScoreService extends IService<UserFieldScore> {
      * @param delta   增量（可为负数）
      */
     void addScore(Long userId, Long fieldId, double delta);
+    
+    /**
+     * 增加用户对某花田的评分，带额外上限（用于签到奖励等场景）
+     *
+     * @param userId  用户id
+     * @param fieldId 花田id
+     * @param delta   增量
+     * @param cap     该类型增量的累计上限
+     */
+    void addScoreCapped(Long userId, Long fieldId, double delta, double cap);
 }

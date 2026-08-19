@@ -23,6 +23,7 @@ import com.zzx.yunpicturebackend.mapper.UserMapper;
 import com.zzx.yunpicturebackend.model.enums.UserRoleEnum;
 import com.zzx.yunpicturebackend.model.vo.LoginUserVO;
 import com.zzx.yunpicturebackend.model.vo.UserVO;
+import com.zzx.yunpicturebackend.service.UserFieldScoreService;
 import com.zzx.yunpicturebackend.service.UserService;
 import com.zzx.yunpicturebackend.utils.AlgorithmUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -42,9 +43,10 @@ import javax.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.zzx.yunpicturebackend.constant.RedisConstants.USER_SIGN_KEY;
+import static com.zzx.yunpicturebackend.constant.RedisConstants.*;
 import static com.zzx.yunpicturebackend.constant.UserConstant.USER_LOGIN_STATE;
 
 /**
@@ -60,6 +62,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     private RedisTemplate<String,Object> redisTemplate;
     @Resource
     private FilePictureUpload filePictureUpload;
+    @Resource
+    private UserFieldScoreService userFieldScoreService;
 
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
@@ -168,6 +172,72 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             num>>>=1;
         }
         return ResultUtils.success(count);
+    }
+    
+    @Override
+    public void autoSignOnVisit(Long userId, Long fieldId, Long spaceId) {
+        LocalDateTime now = LocalDateTime.now();
+        String monthKey = now.format(DateTimeFormatter.ofPattern(":yyyyMM"));
+        int dayOfMonth = now.getDayOfMonth();
+        
+        // 1. 记录网站访问 bitmap
+        String websiteKey = VISIT_WEBSITE_KEY + userId + monthKey;
+        redisTemplate.opsForValue().setBit(websiteKey, dayOfMonth - 1, true);
+        
+        // 2. 记录社区访问 bitmap（同时作为签到记录）
+        String fieldVisitKey = VISIT_FIELD_KEY + userId + ":" + fieldId + monthKey;
+        redisTemplate.opsForValue().setBit(fieldVisitKey, dayOfMonth - 1, true);
+        
+        // 3. 记录传统签到 bitmap（保持兼容）
+        String signKey = USER_SIGN_KEY + spaceId + userId + monthKey;
+        redisTemplate.opsForValue().setBit(signKey, dayOfMonth - 1, true);
+        
+        // 4. 检查连续签到天数
+        List<Long> result = redisTemplate.opsForValue().bitField(signKey, BitFieldSubCommands.create()
+                .get(BitFieldSubCommands.BitFieldType.unsigned(dayOfMonth)).valueAt(0));
+        if (result == null || result.isEmpty()) {
+            return;
+        }
+        Long num = result.get(0);
+        if (num == null || num == 0) {
+            return;
+        }
+        int consecutiveDays = 0;
+        long temp = num;
+        while (true) {
+            if ((temp & 1) == 0) {
+                break;
+            } else {
+                consecutiveDays++;
+            }
+            temp >>>= 1;
+        }
+        
+        // 5. 连签 3 天奖励 +0.6（6 分封顶）
+        if (consecutiveDays == 3) {
+            String bonusKey = SIGN_STREAK_BONUS_KEY + userId + ":" + fieldId;
+            Object bonusObj = redisTemplate.opsForValue().get(bonusKey);
+            double totalBonus = bonusObj != null ? Double.parseDouble(bonusObj.toString()) : 0.0;
+            if (totalBonus < 6.0) {
+                double bonus = Math.min(0.6, 6.0 - totalBonus);
+                userFieldScoreService.addScore(userId, fieldId, bonus);
+                redisTemplate.opsForValue().set(bonusKey, totalBonus + bonus, 30, TimeUnit.DAYS);
+            }
+        }
+        
+        // 6. 重置连续未签周数（用户今天签到了）
+        String inactiveWeeksKey = INACTIVE_WEEKS_KEY + userId;
+        redisTemplate.delete(inactiveWeeksKey);
+    }
+    
+    @Override
+    public boolean hasSignedToday(Long userId, Long spaceId) {
+        LocalDateTime now = LocalDateTime.now();
+        String monthKey = now.format(DateTimeFormatter.ofPattern(":yyyyMM"));
+        String signKey = USER_SIGN_KEY + spaceId + userId + monthKey;
+        int dayOfMonth = now.getDayOfMonth();
+        Boolean signed = redisTemplate.opsForValue().getBit(signKey, dayOfMonth - 1);
+        return signed != null && signed;
     }
     @Override
     public LoginUserVO userLogin(String userAccount, String userPassword, HttpServletRequest request) {

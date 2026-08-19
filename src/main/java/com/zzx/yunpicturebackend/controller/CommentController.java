@@ -45,7 +45,6 @@ public class CommentController {
     }
     @PostMapping("removeByCid")
     public BaseResponse<Boolean> delete(@RequestBody DeleteRequest deleteRequest){
-        commentService.removeById(deleteRequest.getId());
-        return ResultUtils.success(true);
+        return commentService.deleteComment(deleteRequest.getId());
     }
 }

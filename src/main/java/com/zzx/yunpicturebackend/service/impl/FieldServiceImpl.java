@@ -529,6 +529,11 @@ public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
         // 移除花田关系
         boolean result = userFieldService.remove(queryWrapper);
         
+        // 退出社区 -3.0 分
+        if (result) {
+            userFieldScoreService.addScore(userId, FieldId, -3.0);
+        }
+        
         // 同时移除社区空间关系
         if (result) {
             Long spaceId = Field.getSpaceId();

@@ -96,6 +96,30 @@ public class UserController {
     public BaseResponse<Integer> signCount(HttpServletRequest request,Long spaceId){
         return userService.signCount(request,spaceId);
     }
+    
+    /**
+     * 访问社区时自动签到
+     * @param userId 用户 id
+     * @param fieldId 花田 id
+     * @param spaceId 空间 id
+     * @return
+     */
+    @PostMapping("/sign/auto")
+    public BaseResponse<Boolean> autoSign(@RequestParam Long userId, @RequestParam Long fieldId, @RequestParam Long spaceId) {
+        userService.autoSignOnVisit(userId, fieldId, spaceId);
+        return ResultUtils.success(true);
+    }
+    
+    /**
+     * 检查用户今日是否已签到
+     * @param userId 用户 id
+     * @param spaceId 空间 id
+     * @return true=已签到
+     */
+    @GetMapping("/sign/today")
+    public BaseResponse<Boolean> hasSignedToday(@RequestParam Long userId, @RequestParam Long spaceId) {
+        return ResultUtils.success(userService.hasSignedToday(userId, spaceId));
+    }
     /**
      * 获取登录用户
      * @param request

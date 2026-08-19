@@ -28,14 +28,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.zzx.yunpicturebackend.constant.RedisConstants.BLOG_LIKED_KEY;
-import static com.zzx.yunpicturebackend.constant.RedisConstants.FEED_KEY;
+import static com.zzx.yunpicturebackend.constant.RedisConstants.*;
 
 /**
 * @author zzx
@@ -70,17 +72,25 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         if(!isSuccess){
             throw new BusinessException(ErrorCode.OPERATION_ERROR);
         }
-        // 发帖 +0.34 分（3次约 +1 分）
+        // 发帖 +0.8 分（每天 1 次）
         if (post.getFieldId() != null) {
-            userFieldScoreService.addScore(loginUser.getId(), post.getFieldId(), 0.34);
+            String today = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+            String dailyCountKey = DAILY_POST_COUNT_KEY + loginUser.getId() + ":" + post.getFieldId() + ":" + today;
+            Long count = stringRedisTemplate.opsForValue().increment(dailyCountKey);
+            if (count != null && count == 1) {
+                stringRedisTemplate.expire(dailyCountKey, 2, TimeUnit.DAYS);
+            }
+            if (count != null && count <= 1) {
+                userFieldScoreService.addScore(loginUser.getId(), post.getFieldId(), 0.8);
+            }
             // 更新花田帖子数 +1
            // fieldService.update().setSql("postNum = postNum + 1").eq("id", post.getFieldId()).update();
         }
         //3.查询笔记作者的所有粉丝 select * from tb_follow where follow_user=userId
         List<Follow> follows = followService.query().eq("follow_user_id", loginUser.getId()).list();
-        //4.推送笔记id给所有粉丝
+        //4.推送笔记 id 给所有粉丝
         for(Follow follow : follows){
-            //4.1获取粉丝id
+            //4.1获取粉丝 id
             Long userId = follow.getUserId();
             //4.2推送
             String key=FEED_KEY+userId;
@@ -99,13 +109,21 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         if(score==null) {
             //3.如果未点赞，可以点赞
             boolean isSuccess = update().setSql("liked=liked+1").eq("id", id).update();
-            //3.2保存用户到Redis的set集合 zadd key value score
+            //3.2 保存用户到 Redis 的 set 集合 zadd key value score
             if(isSuccess){
                 stringRedisTemplate.opsForZSet().add(key,loginUserId.toString(),System.currentTimeMillis());
-                // 点赞 +0.2 分（5次约 +1 分）
+                // 点赞 +0.1 分（每天 2 次）
                 Post likedPost = getById(id);
                 if (likedPost != null && likedPost.getFieldId() != null) {
-                    userFieldScoreService.addScore(loginUserId, likedPost.getFieldId(), 0.2);
+                    String today = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+                    String dailyCountKey = DAILY_LIKE_COUNT_KEY + loginUserId + ":" + likedPost.getFieldId() + ":" + today;
+                    Long count = stringRedisTemplate.opsForValue().increment(dailyCountKey);
+                    if (count != null && count == 1) {
+                        stringRedisTemplate.expire(dailyCountKey, 2, TimeUnit.DAYS);
+                    }
+                    if (count != null && count <= 2) {
+                        userFieldScoreService.addScore(loginUserId, likedPost.getFieldId(), 0.1);
+                    }
                 }
             }
         }else{
@@ -113,9 +131,14 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             boolean isSuccess = update().setSql("liked=liked-1").eq("id",id).update();
             if(isSuccess){
                 stringRedisTemplate.opsForZSet().remove(key,loginUserId.toString());
+                // 取消点赞 -0.1 分（仅回滚）
+                Post likedPost = getById(id);
+                if (likedPost != null && likedPost.getFieldId() != null) {
+                    userFieldScoreService.addScore(loginUserId, likedPost.getFieldId(), -0.1);
+                }
             }
         }
-
+    
         return ResultUtils.success(true);
     }
 
@@ -254,24 +277,24 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         if (!Objects.equals(post.getUserId(), loginUser.getId())) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
-        
+            
         // 删除帖子关联的图片资源
         String images = post.getImages();
         if (StrUtil.isNotBlank(images)) {
-            // 分割图片URL（多张图片以逗号分隔）
+            // 分割图片 URL（多张图片以逗号分隔）
             String[] imageUrlArray = images.split(",");
             for (String imageUrl : imageUrlArray) {
                 if (StrUtil.isBlank(imageUrl)) {
                     continue;
                 }
                 try {
-                    // 根据URL查询图片记录
+                    // 根据 URL 查询图片记录
                     QueryWrapper<File> fileQueryWrapper = new QueryWrapper<>();
                     fileQueryWrapper.eq("url", imageUrl.trim());
                     File file = pictureService.getOne(fileQueryWrapper);
-                    
+                        
                     if (file != null) {
-                        // 删除图片（会自动清理空间资源和COS文件）
+                        // 删除图片（会自动清理空间资源和 COS 文件）
                         pictureService.deletePicture(file.getId(), loginUser);
                         // 异步清理文件
                         pictureService.clearPictureFile(file);
@@ -282,9 +305,16 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 }
             }
         }
-        
+            
         // 删除帖子
-        return this.removeById(postId);
+        boolean result = this.removeById(postId);
+            
+        // 删除帖子 -0.8 分（仅回滚）
+        if (result && post.getFieldId() != null) {
+            userFieldScoreService.addScore(loginUser.getId(), post.getFieldId(), -0.8);
+        }
+            
+        return result;
     }
 
     @Override

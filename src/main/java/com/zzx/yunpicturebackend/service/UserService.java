@@ -34,6 +34,24 @@ public interface UserService extends IService<User> {
     BaseResponse<Boolean> sign(HttpServletRequest request, Long spaceId);
 
     BaseResponse<Integer> signCount(HttpServletRequest request,Long spaceId);
+    
+    /**
+     * 访问社区时自动签到
+     *
+     * @param userId  用户id
+     * @param fieldId 花田id
+     * @param spaceId 空间id
+     */
+    void autoSignOnVisit(Long userId, Long fieldId, Long spaceId);
+    
+    /**
+     * 检查用户今日是否已签到
+     *
+     * @param userId  用户id
+     * @param spaceId 空间id
+     * @return true=已签到
+     */
+    boolean hasSignedToday(Long userId, Long spaceId);
 
     /**
      * 用户登录

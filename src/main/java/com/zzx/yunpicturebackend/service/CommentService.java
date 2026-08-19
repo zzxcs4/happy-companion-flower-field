@@ -22,6 +22,13 @@ public interface CommentService extends IService<Comment> {
     BaseResponse<List<Comment>> findAllComments(Long pid);
 
     BaseResponse<Boolean> publish(Comment comment);
+    
+    /**
+     * 删除评论（含评分回滚）
+     *
+     * @param commentId 评论 id
+     */
+    BaseResponse<Boolean> deleteComment(Long commentId);
 
 
 //    Result findHeadlineByHid(Integer hid);

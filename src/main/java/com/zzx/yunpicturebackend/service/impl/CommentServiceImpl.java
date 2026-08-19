@@ -18,12 +18,18 @@ import com.zzx.yunpicturebackend.service.UserFieldScoreService;
 import com.zzx.yunpicturebackend.service.UserService;
 import jodd.util.StringUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import static com.zzx.yunpicturebackend.constant.RedisConstants.DAILY_COMMENT_COUNT_KEY;
 
 /**
 * @author Admin
@@ -41,6 +47,8 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
     private PostService postService;
     @Resource
     private UserFieldScoreService userFieldScoreService;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
     @Override
     public BaseResponse<List<Comment>> findAllComments(Long pid) {
@@ -61,11 +69,42 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
         post.setComments(post.getComments() + 1);
         postService.updateById(post);
         commentMapper.insert(comment);
-        // 评论 +0.34 分（3次约 +1 分）
+        // 评论 +0.3 分（每天 1 次）
         if (comment.getPublisher() != null && post.getFieldId() != null) {
-            userFieldScoreService.addScore(comment.getPublisher(), post.getFieldId(), 0.34);
+            String today = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+            String dailyCountKey = DAILY_COMMENT_COUNT_KEY + comment.getPublisher() + ":" + post.getFieldId() + ":" + today;
+            Long count = stringRedisTemplate.opsForValue().increment(dailyCountKey);
+            if (count != null && count == 1) {
+                stringRedisTemplate.expire(dailyCountKey, 2, TimeUnit.DAYS);
+            }
+            if (count != null && count <= 1) {
+                userFieldScoreService.addScore(comment.getPublisher(), post.getFieldId(), 0.3);
+            }
         }
         return ResultUtils.success(true);
+    }
+        
+    @Override
+    public synchronized BaseResponse<Boolean> deleteComment(Long commentId) {
+        Comment comment = this.getById(commentId);
+        if (comment == null) {
+            return ResultUtils.success(false);
+        }
+            
+        Post post = postService.getById(comment.getPost());
+        if (post != null) {
+            post.setComments(Math.max(0, post.getComments() - 1));
+            postService.updateById(post);
+        }
+            
+        boolean result = this.removeById(commentId);
+            
+        // 删除评论 -0.3 分（仅回滚）
+        if (result && comment.getPublisher() != null && post != null && post.getFieldId() != null) {
+            userFieldScoreService.addScore(comment.getPublisher(), post.getFieldId(), -0.3);
+        }
+            
+        return ResultUtils.success(result);
     }
 
 
