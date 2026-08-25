@@ -26,6 +26,13 @@ public class CosManager {
   
     @Resource
     private CosClientConfig cosClientConfig;
+
+    /**
+     * 获取 COS 客户端配置
+     */
+    public CosClientConfig getCosClientConfig() {
+        return cosClientConfig;
+    }
   
     @Resource  
     private COSClient cosClient;

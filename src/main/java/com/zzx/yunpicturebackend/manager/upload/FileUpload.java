@@ -37,13 +37,13 @@ public class FileUpload {
             // 图片
             "jpg", "jpeg", "png", "gif", "bmp", "webp", "svg",
             // 文档
-            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md",
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md", "json", "xml", "csv", "rtf",
             // 压缩包
             "zip", "rar", "7z", "tar", "gz",
             // 视频
             "mp4", "avi", "mov", "wmv", "flv", "mkv",
             // 音频
-            "mp3", "wav", "flac", "aac", "ogg"
+            "mp3", "wav", "flac", "aac", "ogg","m4a"
     );
 
     // 最大文件大小：100MB

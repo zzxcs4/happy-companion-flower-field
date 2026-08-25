@@ -118,6 +118,11 @@ public class FileVO implements Serializable {
     private Integer duration;
 
     /**
+     * AI 生成的摘要
+     */
+    private String summary;
+
+    /**
      * 创建用户信息
      */
     private UserVO user;

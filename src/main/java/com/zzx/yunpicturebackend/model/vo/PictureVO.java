@@ -56,7 +56,7 @@ public class PictureVO implements Serializable {
     /**  
      * 文件体积  
      */  
-    private Long picSize;  
+    private Long size;
   
     /**  
      * 图片宽度  
@@ -76,7 +76,7 @@ public class PictureVO implements Serializable {
     /**  
      * 图片格式  
      */  
-    private String picFormat;  
+    private String format;
   
     /**  
      * 用户 id  
@@ -87,6 +87,11 @@ public class PictureVO implements Serializable {
      * 空间id
      */
     private Long spaceId;
+
+    /**
+     * 空间类型（0 私有 1 团队 2 社区；为空表示公共空间）
+     */
+    private Integer spaceType;
 
     /**
      * 权限列表
@@ -118,6 +123,11 @@ public class PictureVO implements Serializable {
      * 视频时长
      */
     private  Integer duration;
+
+    /**
+     * ai摘要
+     */
+    private String summary;
 
     private static final long serialVersionUID = 1L;  
   

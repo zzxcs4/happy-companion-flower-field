@@ -253,9 +253,9 @@ public class PrivateMessageHandler extends TextWebSocketHandler {
                 linkId = userLinkService.selectLinkId(min, max);
             }
 
-            // 存储消息到数据库
+            // 存储消息到数据库（记录接收者 toId，初始未读，供未读红点轮询使用）
             Timestamp createTime = new Timestamp(System.currentTimeMillis());
-            chatListService.insertChat(linkId, userId, content, createTime);
+            chatListService.insertChat(linkId, userId, content, createTime, toId);
 
             // 构建消息对象
             Message msg = new Message();

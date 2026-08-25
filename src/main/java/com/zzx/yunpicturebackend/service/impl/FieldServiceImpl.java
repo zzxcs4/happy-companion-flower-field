@@ -167,21 +167,26 @@ public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
 
     @Override
     public boolean deleteField(long id, User loginUser) {
-        // 校验花田是否存在
         Field field = getFieldById(id);
         long fieldId = field.getId();
-        // 校验你是不是花田的创建人,后面这句话为什么不行Field.getUserId() != loginUser.getId()
         if (!Objects.equals(field.getUserId(), loginUser.getId())&&!userService.isAdmin(loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
-        // 移除所有加入队伍的关联信息
         QueryWrapper<UserField> userFieldQueryWrapper = new QueryWrapper<>();
         userFieldQueryWrapper.eq("fieldId", fieldId);
         boolean result = userFieldService.remove(userFieldQueryWrapper);
         if (!result) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "删除花田关联信息失败");
         }
-        // 删除队伍
+
+        Long spaceId = field.getSpaceId();
+        if (spaceId != null && spaceId > 0) {
+            QueryWrapper<SpaceUser> spaceUserQueryWrapper = new QueryWrapper<>();
+            spaceUserQueryWrapper.eq("spaceId", spaceId);
+            spaceUserService.remove(spaceUserQueryWrapper);
+            spaceService.removeById(spaceId);
+        }
+
         return this.removeById(fieldId);
     }
     private Field getFieldById(Long fieldId) {
@@ -337,8 +342,8 @@ public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
                     QueryWrapper<UserField> userFieldQueryWrapper = new QueryWrapper<>();
                     userFieldQueryWrapper.eq("userId", userId);
                     long hasJoinNum = userFieldService.count(userFieldQueryWrapper);
-                    if (hasJoinNum > 5) {
-                        throw new BusinessException(ErrorCode.PARAMS_ERROR, "最多创建和加入 5 个花田");
+                    if (hasJoinNum > 1000) {
+                        throw new BusinessException(ErrorCode.PARAMS_ERROR, "最多创建和加入 1000 个社区");
                     }
                     // 不能重复加入已加入的队伍
                     userFieldQueryWrapper = new QueryWrapper<>();
@@ -421,8 +426,8 @@ public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
                     QueryWrapper<UserField> userFieldQueryWrapper = new QueryWrapper<>();
                     userFieldQueryWrapper.eq("userId", userId);
                     long hasJoinNum = userFieldService.count(userFieldQueryWrapper);
-                    if (hasJoinNum > 5) {
-                        throw new BusinessException(ErrorCode.PARAMS_ERROR, "最多创建和加入 5 个花田");
+                    if (hasJoinNum > 1000) {
+                        throw new BusinessException(ErrorCode.PARAMS_ERROR, "最多创建和加入 1000 个社区");
                     }
                     // 不能重复加入已加入的队伍
                     userFieldQueryWrapper = new QueryWrapper<>();

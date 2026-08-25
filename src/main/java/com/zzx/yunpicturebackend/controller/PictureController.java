@@ -48,7 +48,7 @@ import java.util.concurrent.TimeUnit;
 
 @RestController
 @Slf4j
-@RequestMapping("/c")
+@RequestMapping("/picture")//c
 public class PictureController {
     @Resource
     private PictureService pictureService;
@@ -191,6 +191,10 @@ public class PictureController {
         List<String> permissionList = spaceUserAuthManager.getPermissionList(file,space, loginUser);
         PictureVO pictureVO = pictureService.getPictureVO(file, request);
         pictureVO.setPermissionList(permissionList);
+        // 填充空间类型（供前端判断是否支持评论等场景）
+        if (space != null) {
+            pictureVO.setSpaceType(space.getSpaceType());
+        }
         // 获取封装类
         return ResultUtils.success(pictureVO);
     }
@@ -229,8 +233,8 @@ public class PictureController {
             pictureQueryRequest.setNullSpaceId(true);
         } else {
             // 私有空间
-            //boolean hasPermission = StpKit.SPACE.hasPermission(SpaceUserPermissionConstant.PICTURE_VIEW);
-            //ThrowUtils.throwIf(!hasPermission, ErrorCode.NO_AUTH_ERROR);
+            boolean hasPermission = StpKit.SPACE.hasPermission(SpaceUserPermissionConstant.PICTURE_VIEW);
+            ThrowUtils.throwIf(!hasPermission, ErrorCode.NO_AUTH_ERROR);
         }
 
         // 限制爬虫

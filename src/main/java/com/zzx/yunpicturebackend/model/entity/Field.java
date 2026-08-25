@@ -36,7 +36,7 @@ public class Field {
     /**
      * 最大人数
      */
-    @TableField(updateStrategy = FieldStrategy.IGNORED)
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Integer maxNum;
 
     /**

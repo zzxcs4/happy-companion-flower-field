@@ -24,6 +24,7 @@ import com.zzx.yunpicturebackend.model.vo.VideoVO;
 import com.zzx.yunpicturebackend.service.SpaceService;
 import com.zzx.yunpicturebackend.service.UserService;
 import com.zzx.yunpicturebackend.service.VideosService;
+import com.zzx.yunpicturebackend.service.VideoTranscodeService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -64,6 +65,8 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
     private TransactionTemplate transactionTemplate;
     @Resource
     private SpaceCapacityManager spaceCapacityManager;
+    @Resource
+    private VideoTranscodeService videoTranscodeService;
     /**
      * 文件上传前检查文件
      * 返回当前以上传到哪个分块
@@ -171,10 +174,13 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
 
 
     /**
-     * 分块上传
-     * @param key
-     * @param file
-     * @return
+     * 分块上传（幂等，支持断点续传）
+     * @param file 本地待上传文件
+     * @param spaceId 空间 id
+     * @param md5 文件 MD5
+     * @param videoId 文件 id（非空表示更新）
+     * @param request 请求
+     * @return 上传结果
      */
     @Override
     public BaseResponse<VideoVO> IdempotentMultipartUploader(File file, Long spaceId, String md5, Long videoId,HttpServletRequest request) {
@@ -277,6 +283,10 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
                 }}
             return file1;
         });
+        // 视频上传成功后异步转码为 H.264 MP4（解决浏览器无法播放非 mp4 格式的问题，失败不影响上传结果）
+        if (videoTranscodeService.isVideoFormat(file1.getFormat())) {
+            videoTranscodeService.transcodeAsync(file1.getId());
+        }
         return ResultUtils.success(VideoVO.objToVo(file1));
     }
 

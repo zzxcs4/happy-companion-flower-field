@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zzx.yunpicturebackend.mapper.FileCommentMapper">
+
+    <select id="listCommentsWithUser" resultType="com.zzx.yunpicturebackend.model.entity.FileComment">
+        select fc.id, fc.fileId, fc.content, fc.userId, fc.atUserIds,
+               fc.createTime, fc.updateTime, u.userName, u.userAvatar
+        from file_comment fc
+                 left join user u on fc.userId = u.id
+        where fc.fileId = #{fileId}
+          and fc.isDelete = 0
+        order by fc.createTime desc
+    </select>
+</mapper>

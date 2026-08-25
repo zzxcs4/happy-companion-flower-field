@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 @RestController
 @Slf4j
-@RequestMapping("/s")
+@RequestMapping("/space")//s
 public class SpaceController {
     @Resource
     private SpaceService spaceService;

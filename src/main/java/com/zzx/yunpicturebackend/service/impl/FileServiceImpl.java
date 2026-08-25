@@ -16,7 +16,9 @@ import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.zzx.yunpicturebackend.model.enums.PictureReviewStatusEnum;
 import com.zzx.yunpicturebackend.model.vo.FileVO;
+import com.zzx.yunpicturebackend.service.AudioCompressService;
 import com.zzx.yunpicturebackend.service.FileService;
+import com.zzx.yunpicturebackend.service.VideoTranscodeService;
 import com.zzx.yunpicturebackend.service.SpaceService;
 import com.zzx.yunpicturebackend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +44,10 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File>
     private TransactionTemplate transactionTemplate;
     @Resource
     private SpaceCapacityManager spaceCapacityManager;
+    @Resource
+    private AudioCompressService audioCompressService;
+    @Resource
+    private VideoTranscodeService videoTranscodeService;
 
     @Override
     public FileVO uploadFile(MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest, User loginUser) {
@@ -122,6 +128,15 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File>
             }
             return file;
         });
+
+        // 音频上传成功后异步压缩为 MP3 128kbps（失败不影响上传结果）
+        if (audioCompressService.isAudioFormat(file.getFormat())) {
+            audioCompressService.compressAsync(file.getId());
+        }
+        // 视频上传成功后异步转码为 H.264 MP4（失败不影响上传结果）
+        if (videoTranscodeService.isVideoFormat(file.getFormat())) {
+            videoTranscodeService.transcodeAsync(file.getId());
+        }
 
         return FileVO.objToVo(file);
     }

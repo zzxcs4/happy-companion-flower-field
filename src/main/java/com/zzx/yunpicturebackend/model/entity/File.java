@@ -146,4 +146,10 @@ public class File implements Serializable {
     private  Integer duration;
    @Nullable
     private  String fileType;
+
+    /**
+     * AI 生成的摘要
+     */
+   @Nullable
+    private String summary;
 }

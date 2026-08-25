@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zzx.yunpicturebackend.mapper.FileMentionMapper">
+
+    <!-- @ 我的提及列表：联表文件名、评论内容、评论者信息，过滤已删除的评论/文件 -->
+    <select id="listMentionsWithDetail" resultType="com.zzx.yunpicturebackend.model.vo.FileMentionVO">
+        select fm.commentId, fm.fileId, fm.spaceId,
+               f.name as fileName, fc.content,
+               u.userName as fromUserName, u.userAvatar as fromUserAvatar,
+               fm.createTime
+        from file_mention fm
+                 left join file_comment fc on fm.commentId = fc.id and fc.isDelete = 0
+                 left join file f on fm.fileId = f.id and f.isDelete = 0
+                 left join user u on fm.fromUserId = u.id
+        where fm.toUserId = #{toUserId}
+          and fm.spaceId = #{spaceId}
+          and fc.id is not null
+          and f.id is not null
+        order by fm.createTime desc
+        limit 200
+    </select>
+
+    <!-- 我有未读 @ 提及的空间 id 列表 -->
+    <select id="listUnreadSpaceIds" resultType="java.lang.Long">
+        select distinct spaceId
+        from file_mention
+        where toUserId = #{toUserId}
+          and isRead = 0
+    </select>
+</mapper>

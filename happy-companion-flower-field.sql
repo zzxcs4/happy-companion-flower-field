@@ -24,31 +24,35 @@ DROP TABLE IF EXISTS `chat_list`;
 CREATE TABLE `chat_list`  (
   `listId` int(11) NOT NULL AUTO_INCREMENT,
   `linkId` int(11) NULL DEFAULT NULL,
-  `userId` bigint(20) NULL DEFAULT NULL,
+  `userId` bigint(20) NULL DEFAULT NULL COMMENT '发送者 id',
   `content` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `createtime` datetime NULL DEFAULT NULL,
-  PRIMARY KEY (`listId`) USING BTREE
+  `toId` bigint(20) NULL DEFAULT NULL COMMENT '接收者 id',
+  `isRead` tinyint(4) NOT NULL DEFAULT 0 COMMENT '接收者是否已读：0-未读 1-已读',
+  PRIMARY KEY (`listId`) USING BTREE,
+  INDEX `idx_toId_isRead`(`toId`, `isRead`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 17 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of chat_list
 -- ----------------------------
-INSERT INTO `chat_list` VALUES (1, 1, 1957032172908269570, '你好', '2026-04-27 17:24:27');
-INSERT INTO `chat_list` VALUES (2, 1, 1957032172908269570, '你好，有什么问题吗', '2026-04-27 17:59:56');
-INSERT INTO `chat_list` VALUES (3, 2, 1957032172908269570, '你好', '2026-04-27 18:00:15');
-INSERT INTO `chat_list` VALUES (4, 3, 1957032172908269570, 'hi', '2026-04-27 18:00:23');
-INSERT INTO `chat_list` VALUES (5, 1, 1956985828009132034, 'hi', '2026-04-27 18:02:15');
-INSERT INTO `chat_list` VALUES (6, 4, 1956985828009132034, 'hi', '2026-04-27 18:03:32');
-INSERT INTO `chat_list` VALUES (7, 1, 1956985828009132034, 'hi', '2026-04-27 18:08:25');
-INSERT INTO `chat_list` VALUES (8, 1, 1956985828009132034, 'zm', '2026-04-27 18:09:06');
-INSERT INTO `chat_list` VALUES (9, 1, 1956985828009132034, 'c', '2026-04-27 18:19:56');
-INSERT INTO `chat_list` VALUES (10, 1, 1956985828009132034, '怎么回事', '2026-04-27 18:45:50');
-INSERT INTO `chat_list` VALUES (11, 1, 1956985828009132034, '好了吗', '2026-04-27 18:50:52');
-INSERT INTO `chat_list` VALUES (12, 1, 1956985828009132034, 'H', '2026-04-27 18:53:43');
-INSERT INTO `chat_list` VALUES (13, 1, 1957032172908269570, '好了，可以正常对话了', '2026-04-27 19:03:25');
-INSERT INTO `chat_list` VALUES (14, 1, 1956985828009132034, '哈喽', '2026-04-15 17:48:59');
-INSERT INTO `chat_list` VALUES (15, 1, 1957032172908269570, 'hi', '2026-04-27 10:26:36');
-INSERT INTO `chat_list` VALUES (16, 3, 1957032172908269570, '今天怎么样？', '2026-05-11 15:40:47');
+-- 历史记录统一视为已读（toId 置空、isRead 置 1），避免导入后出现大量历史红点
+INSERT INTO `chat_list` VALUES (1, 1, 1957032172908269570, '你好', '2026-04-27 17:24:27', NULL, 1);
+INSERT INTO `chat_list` VALUES (2, 1, 1957032172908269570, '你好，有什么问题吗', '2026-04-27 17:59:56', NULL, 1);
+INSERT INTO `chat_list` VALUES (3, 2, 1957032172908269570, '你好', '2026-04-27 18:00:15', NULL, 1);
+INSERT INTO `chat_list` VALUES (4, 3, 1957032172908269570, 'hi', '2026-04-27 18:00:23', NULL, 1);
+INSERT INTO `chat_list` VALUES (5, 1, 1956985828009132034, 'hi', '2026-04-27 18:02:15', NULL, 1);
+INSERT INTO `chat_list` VALUES (6, 4, 1956985828009132034, 'hi', '2026-04-27 18:03:32', NULL, 1);
+INSERT INTO `chat_list` VALUES (7, 1, 1956985828009132034, 'hi', '2026-04-27 18:08:25', NULL, 1);
+INSERT INTO `chat_list` VALUES (8, 1, 1956985828009132034, 'zm', '2026-04-27 18:09:06', NULL, 1);
+INSERT INTO `chat_list` VALUES (9, 1, 1956985828009132034, 'c', '2026-04-27 18:19:56', NULL, 1);
+INSERT INTO `chat_list` VALUES (10, 1, 1956985828009132034, '怎么回事', '2026-04-27 18:45:50', NULL, 1);
+INSERT INTO `chat_list` VALUES (11, 1, 1956985828009132034, '好了吗', '2026-04-27 18:50:52', NULL, 1);
+INSERT INTO `chat_list` VALUES (12, 1, 1956985828009132034, 'H', '2026-04-27 18:53:43', NULL, 1);
+INSERT INTO `chat_list` VALUES (13, 1, 1957032172908269570, '好了，可以正常对话了', '2026-04-27 19:03:25', NULL, 1);
+INSERT INTO `chat_list` VALUES (14, 1, 1956985828009132034, '哈喽', '2026-04-15 17:48:59', NULL, 1);
+INSERT INTO `chat_list` VALUES (15, 1, 1957032172908269570, 'hi', '2026-04-27 10:26:36', NULL, 1);
+INSERT INTO `chat_list` VALUES (16, 3, 1957032172908269570, '今天怎么样？', '2026-05-11 15:40:47', NULL, 1);
 
 -- ----------------------------
 -- Table structure for field
@@ -340,6 +344,51 @@ INSERT INTO `post_comment` VALUES (1983379276228243458, '福利非常不错', 19
 INSERT INTO `post_comment` VALUES (1983450844224626689, '在我手机里待了好久', 1956985828009132034, 1982045656003686402, '2026-04-27 16:28:27', '2026-04-27 16:28:27');
 INSERT INTO `post_comment` VALUES (2053668419692449793, '欢迎大家来看', 1957032183779905538, 2053441660967542786, '2026-05-11 10:48:01', '2026-05-11 10:48:01');
 INSERT INTO `post_comment` VALUES (2053668479289315329, '不错不错', 1957032183779905538, 2053667485990047745, '2026-05-11 10:48:15', '2026-05-11 10:48:15');
+
+-- ----------------------------
+-- Table structure for file_comment
+-- ----------------------------
+DROP TABLE IF EXISTS `file_comment`;
+CREATE TABLE `file_comment`  (
+  `id` bigint(20) NOT NULL COMMENT 'id',
+  `fileId` bigint(20) NOT NULL COMMENT '文件 id',
+  `content` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '评论内容',
+  `userId` bigint(20) NOT NULL COMMENT '评论用户 id',
+  `atUserIds` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '被 @ 的用户 id 列表（JSON 数组）',
+  `createTime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updateTime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `isDelete` tinyint(4) NOT NULL DEFAULT 0 COMMENT '是否删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_fileId`(`fileId`) USING BTREE,
+  INDEX `idx_userId`(`userId`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '文件评论' ROW_FORMAT = DYNAMIC;
+
+-- ----------------------------
+-- Records of file_comment
+-- ----------------------------
+
+-- ----------------------------
+-- Table structure for file_mention
+-- ----------------------------
+DROP TABLE IF EXISTS `file_mention`;
+CREATE TABLE `file_mention`  (
+  `id` bigint(20) NOT NULL COMMENT 'id',
+  `commentId` bigint(20) NOT NULL COMMENT '评论 id',
+  `fileId` bigint(20) NOT NULL COMMENT '文件 id',
+  `spaceId` bigint(20) NOT NULL COMMENT '空间 id（仅团队/社区空间）',
+  `fromUserId` bigint(20) NOT NULL COMMENT '评论者 id',
+  `toUserId` bigint(20) NOT NULL COMMENT '被 @ 的用户 id',
+  `isRead` tinyint(4) NOT NULL DEFAULT 0 COMMENT '是否已读：0-未读 1-已读',
+  `createTime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updateTime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_toUser_read`(`toUserId`, `isRead`) USING BTREE,
+  INDEX `idx_spaceId`(`spaceId`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '文件评论@提及记录' ROW_FORMAT = DYNAMIC;
+
+-- ----------------------------
+-- Records of file_mention
+-- ----------------------------
 
 -- ----------------------------
 -- Table structure for second_category
@@ -651,3 +700,10 @@ CREATE TABLE `videos`  (
 -- ----------------------------
 
 SET FOREIGN_KEY_CHECKS = 1;
+-- ----------------------------
+-- 私信增加红点
+-- ----------------------------
+ALTER TABLE chat_list ADD COLUMN toId bigint(20) NULL DEFAULT NULL COMMENT '接收者 id' AFTER createtime;
+ALTER TABLE chat_list ADD COLUMN isRead tinyint(4) NOT NULL DEFAULT 0 COMMENT '接收者是否已读：0-未读 1-已读' AFTER toId;
+ALTER TABLE chat_list ADD INDEX idx_toId_isRead (toId, isRead);
+UPDATE chat_list SET isRead = 1 WHERE listId > 0;  -- 历史消息视为已读，避免一上来全是红点

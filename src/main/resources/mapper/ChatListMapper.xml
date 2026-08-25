@@ -7,6 +7,20 @@
     </select>
 
     <insert id="insertChat" keyProperty="listId" keyColumn="listId">
-        insert into chat_list(linkId,userId,content,createtime) values (#{linkId},#{fromId},#{content},#{timestamp});
+        insert into chat_list(linkId,userId,content,createtime,toId,isRead)
+        values (#{linkId},#{fromId},#{content},#{timestamp},#{toId},0);
     </insert>
+
+    <select id="selectUnreadConversations" resultType="com.zzx.yunpicturebackend.model.vo.UnreadChatVO">
+        select userId, count(*) as unreadCount
+        from chat_list
+        where toId = #{toId} and isRead = 0
+        group by userId;
+    </select>
+
+    <update id="markRead">
+        update chat_list
+        set isRead = 1
+        where toId = #{toId} and userId = #{fromId} and isRead = 0;
+    </update>
 </mapper>

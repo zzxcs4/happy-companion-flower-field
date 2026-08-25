@@ -89,6 +89,7 @@ public class StpInterfaceImpl implements StpInterface {
             String moduleName = StrUtil.subBefore(partUri, "/", false);
             switch (moduleName) {
                 case "picture":
+                case "file":
                     authRequest.setPictureId(id);
                     break;
                 case "spaceUser":

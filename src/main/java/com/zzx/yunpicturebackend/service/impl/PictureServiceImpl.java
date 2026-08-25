@@ -15,7 +15,7 @@ import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.exception.ThrowUtils;
 import com.zzx.yunpicturebackend.manager.CosManager;
-import com.zzx.yunpicturebackend.manager.FileManager;
+
 import com.zzx.yunpicturebackend.manager.SpaceCapacityManager;
 import com.zzx.yunpicturebackend.manager.upload.FilePictureUpload;
 import com.zzx.yunpicturebackend.manager.upload.PictureUploadTemplate;
@@ -231,12 +231,14 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
         boolean nullSpaceId = pictureQueryRequest.isNullSpaceId();
         Date startEditTime = pictureQueryRequest.getStartEditTime();
         Date endEditTime = pictureQueryRequest.getEndEditTime();
-        // 从多字段中搜索
+        // 从多字段中搜索（名称、简介、AI 摘要）
         if (StrUtil.isNotBlank(searchText)) {
             // 需要拼接查询条件
             queryWrapper.and(qw -> qw.like("name", searchText)
                     .or()
                     .like("introduction", searchText)
+                    .or()
+                    .like("summary", searchText)
             );
         }
         queryWrapper.ge(ObjUtil.isNotEmpty(startEditTime), "editTime", startEditTime);
