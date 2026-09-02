@@ -18,5 +18,5 @@ public interface IFollowService extends IService<Follow> {
 
     List<User> follows(Long userId);
 
-    BaseResponse<List<User>> fans(Long followUserId  ,HttpServletRequest request);
+    List<User> fans(Long followUserId);
 }

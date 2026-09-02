@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -19,10 +20,13 @@ import com.zzx.yunpicturebackend.model.vo.ScrollVO;
 import com.zzx.yunpicturebackend.service.*;
 import com.zzx.yunpicturebackend.mapper.PostMapper;
 import jodd.util.StringUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -30,10 +34,7 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -44,6 +45,7 @@ import static com.zzx.yunpicturebackend.constant.RedisConstants.*;
 * @description 针对表【post】的数据库操作Service实现
 * @createDate 2025-10-19 20:25:48
 */
+@Slf4j
 @Service
 public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     implements PostService{
@@ -273,11 +275,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         // 校验帖子是否存在
         Post post = getPostById(id);
         long postId = post.getId();
-        // 校验你是不是帖子的创建人
-        if (!Objects.equals(post.getUserId(), loginUser.getId())) {
+        // 只有管理员或者帖子的创建者可以修改
+        if (!Objects.equals(post.getUserId(), loginUser.getId()) && !userService.isAdmin(loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
-            
         // 删除帖子关联的图片资源
         String images = post.getImages();
         if (StrUtil.isNotBlank(images)) {
@@ -301,11 +302,17 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                     }
                 } catch (Exception e) {
                     // 记录错误但不影响帖子删除
-                    e.printStackTrace();
+                    throw new BusinessException(ErrorCode.OPERATION_ERROR);
                 }
             }
         }
-            
+        //清除粉丝zSet
+//        List<User> fans = followService.fans(post.getUserId());
+//        for (User fan : fans){
+//            stringRedisTemplate.opsForZSet().remove(FEED_KEY + fan.getId(), post.getId().toString());
+//        }
+        clearFansFeedAsync(postId, post.getUserId());
+
         // 删除帖子
         boolean result = this.removeById(postId);
             
@@ -316,13 +323,49 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             
         return result;
     }
+    @Async("taskExecutor") // 使用异步线程池
+    public void clearFansFeedAsync(Long postId, Long userId) {
+        int pageSize = 1000;
+        int pageNum = 1;
+
+        while (true) {
+            // 分页获取粉丝ID（只查ID，减少数据传输）
+            List<User> fans = followService.fans(userId);
+            if (CollectionUtils.isEmpty(fans)) {
+                break;
+            }
+            // 获取所有粉丝ID列表（只查ID，不查完整User对象）
+            List<Long> fanIds = fans.stream().map(User::getId).collect(Collectors.toList());
+            // 使用 Pipeline 批量删除
+            stringRedisTemplate.executePipelined(
+                    (RedisCallback<Object>) connection -> {
+                        for (Long fanId : fanIds) {
+                            String key = FEED_KEY + fanId;
+                            connection.zSetCommands()
+                                    .zRem(key.getBytes(), postId.toString().getBytes());
+                        }
+                        return null;
+                    }
+            );
+
+            log.info("已清理第 {} 批粉丝（{} 人）的 feed 流", pageNum, fanIds.size());
+            pageNum++;
+        }
+
+        log.info("帖子 {} 已从所有粉丝的 feed 流中移除", postId);
+    }
 
     @Override
     public BaseResponse<List<Post>> queryPost(Integer current, String searchText, Long fieldId,HttpServletRequest request) {
         QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq(ObjUtil.isNotEmpty(fieldId),"fieldId", fieldId);
-        queryWrapper.like(StringUtil.isNotBlank(searchText),"title", searchText).or();
-        queryWrapper.like(StringUtil.isNotBlank(searchText),"content", searchText);
+        if (StringUtil.isNotBlank(searchText)) {
+            queryWrapper.and(wrapper ->
+                    wrapper.like("title", searchText)
+                            .or()
+                            .like("content", searchText)
+            );
+        }
 
         // 根据查询
         Page<Post> page = this.page(new Page<>(current, SystemConstants.MAX_PAGE_SIZE),queryWrapper);

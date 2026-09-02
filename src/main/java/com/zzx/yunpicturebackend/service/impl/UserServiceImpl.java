@@ -226,7 +226,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
         
         // 6. 重置连续未签周数（用户今天签到了）
-        String inactiveWeeksKey = INACTIVE_WEEKS_KEY + userId;
+        String inactiveWeeksKey = INACTIVE_WEEKS_KEY + userId + ":" + fieldId;
         redisTemplate.delete(inactiveWeeksKey);
     }
     

@@ -21,10 +21,7 @@ import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.zzx.yunpicturebackend.model.enums.PictureReviewStatusEnum;
 import com.zzx.yunpicturebackend.model.vo.VideoVO;
-import com.zzx.yunpicturebackend.service.SpaceService;
-import com.zzx.yunpicturebackend.service.UserService;
-import com.zzx.yunpicturebackend.service.VideosService;
-import com.zzx.yunpicturebackend.service.VideoTranscodeService;
+import com.zzx.yunpicturebackend.service.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -67,6 +64,9 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
     private SpaceCapacityManager spaceCapacityManager;
     @Resource
     private VideoTranscodeService videoTranscodeService;
+    @Resource
+    private AudioCompressService audioCompressService;
+
     /**
      * 文件上传前检查文件
      * 返回当前以上传到哪个分块
@@ -286,6 +286,9 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
         // 视频上传成功后异步转码为 H.264 MP4（解决浏览器无法播放非 mp4 格式的问题，失败不影响上传结果）
         if (videoTranscodeService.isVideoFormat(file1.getFormat())) {
             videoTranscodeService.transcodeAsync(file1.getId());
+        }
+        if (audioCompressService.isAudioFormat(file1.getFormat())){
+            audioCompressService.compressAsync(file1.getId());
         }
         return ResultUtils.success(VideoVO.objToVo(file1));
     }

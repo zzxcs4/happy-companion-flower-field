@@ -64,9 +64,10 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
             if(isSuccess){
             stringRedisTemplate.opsForSet().remove(key,followUserId.toString());
             }
-            Integer fansNum = query().eq("follow_user_id", loginUser.getId()).count().intValue();
-            loginUser.setFansNum(fansNum);
-            userService.updateById(loginUser);
+            //Integer fansNum = query().eq("follow_user_id", loginUser.getId()).count().intValue();
+            //loginUser.setFansNum(fansNum);
+            userService.update().setSql("fansNum = fansNum - 1").eq("id", followUserId).update(); ;
+            //userService.updateById(loginUser);
         }
         return ResultUtils.success(true);
     }
@@ -76,7 +77,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         //获取登录用户
         Long userId = userService.getLoginUser(request).getId();
         //1.查询是否关注
-        Integer count = query().eq("user_id", followUserId)
+        Integer count = query().eq("user_id", userId)
                 .eq("follow_user_id", followUserId).count().intValue();
 
         return ResultUtils.success(count>0);
@@ -120,7 +121,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
     }
 
     @Override
-    public BaseResponse<List<User>> fans(Long followUserId, HttpServletRequest request) {
+    public List<User> fans(Long followUserId) {
         //1.获取当前登录用户
 
         List<Follow> follows = query().eq("follow_user_id", followUserId).list();
@@ -128,9 +129,9 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         if(fansId!=null&&fansId.size()>0){
             queryWrapper.in("id", fansId);
-            return ResultUtils.success(userService.list(queryWrapper));
+            return userService.list(queryWrapper);
         }else {
-            return ResultUtils.success(Collections.emptyList());
+            return Collections.emptyList();
         }
     }
 }

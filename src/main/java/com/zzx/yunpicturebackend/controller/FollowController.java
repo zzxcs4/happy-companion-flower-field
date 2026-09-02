@@ -39,7 +39,7 @@ public class FollowController {
     }
     @GetMapping("/fans")
     public BaseResponse<List<User>> fans(@RequestParam(value = "id")Long followUserId,  HttpServletRequest request){
-        return followService.fans(followUserId,request);
+        return ResultUtils.success(followService.fans(followUserId));
     }
 
     @GetMapping("/common/{id}")
