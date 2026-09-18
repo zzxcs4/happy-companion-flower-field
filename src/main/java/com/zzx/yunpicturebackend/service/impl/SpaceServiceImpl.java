@@ -12,7 +12,11 @@ import com.zzx.yunpicturebackend.exception.ThrowUtils;
 
 import com.zzx.yunpicturebackend.model.dto.space.SpaceAddRequest;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceEditRequest;
+import com.zzx.yunpicturebackend.model.dto.space.SpaceJoinRequest;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceQueryRequest;
+import com.zzx.yunpicturebackend.model.dto.space.SpaceQuitRequest;
+import com.zzx.yunpicturebackend.model.entity.Category;
+import com.zzx.yunpicturebackend.model.entity.Post;
 import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.SpaceUser;
 import com.zzx.yunpicturebackend.model.entity.User;
@@ -22,9 +26,14 @@ import com.zzx.yunpicturebackend.model.enums.SpaceTypeEnum;
 import com.zzx.yunpicturebackend.model.vo.SpaceVO;
 import com.zzx.yunpicturebackend.model.vo.UserVO;
 import com.zzx.yunpicturebackend.service.SpaceService;
+import com.zzx.yunpicturebackend.mapper.PostMapper;
 import com.zzx.yunpicturebackend.mapper.SpaceMapper;
 import com.zzx.yunpicturebackend.service.SpaceUserService;
+import com.zzx.yunpicturebackend.service.CategoryService;
+import com.zzx.yunpicturebackend.service.UserFieldScoreService;
 import com.zzx.yunpicturebackend.service.UserService;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -33,6 +42,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -53,6 +63,19 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     @Resource
     @Lazy
     private SpaceUserService spaceUserService;
+
+    @Resource
+    private PostMapper postMapper;
+
+    @Resource
+    @Lazy
+    private UserFieldScoreService userFieldScoreService;
+
+    @Resource
+    private CategoryService categoryService;
+
+    @Resource
+    private RedissonClient redissonClient;
 
     @Override
     public long addSpace(SpaceAddRequest spaceAddRequest, User loginUser) {
@@ -77,6 +100,15 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         this.validSpace(space, true);
         Long userId = loginUser.getId();
         space.setUserId(userId);
+        if(space.getSpaceType()==2){
+            // 社区空间默认公开
+            if (space.getStatus() == null) {
+                space.setStatus(0);
+            }
+            // 社区空间不限容量
+            space.setMaxSize(0L);
+            space.setMaxCount(0L);
+        }
         // 权限校验
         if(spaceAddRequest.getSpaceType()==0||spaceAddRequest.getSpaceType()==1){
         if (SpaceLevelEnum.COMMON.getValue() != spaceAddRequest.getSpaceLevel() && !userService.isAdmin(loginUser)) {
@@ -124,6 +156,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
         // 从对象中取值
         Long id = spaceQueryRequest.getId();
+        List<Long> idList = spaceQueryRequest.getIdList();
         String spaceName = spaceQueryRequest.getSpaceName();
         Integer spaceLevel = spaceQueryRequest.getSpaceLevel();
         Long userId = spaceQueryRequest.getUserId();
@@ -131,11 +164,24 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         String sortOrder = spaceQueryRequest.getSortOrder();
         String sortField = spaceQueryRequest.getSortField();
         Integer spaceType = spaceQueryRequest.getSpaceType();
+        Integer status = spaceQueryRequest.getStatus();
+        Long categoryId = spaceQueryRequest.getCategoryId();
+        String searchText = spaceQueryRequest.getSearchText();
+        queryWrapper.in(CollUtil.isNotEmpty(idList), "id", idList);
         queryWrapper.eq(ObjUtil.isNotEmpty(spaceType), "spaceType", spaceType);
         queryWrapper.eq(ObjUtil.isNotEmpty(id), "id", id);
         queryWrapper.eq(ObjUtil.isNotEmpty(userId), "userId", userId);
         queryWrapper.like(StrUtil.isNotBlank(spaceName), "spaceName", spaceName);
         queryWrapper.eq(ObjUtil.isNotEmpty(spaceLevel), "spaceLevel", spaceLevel);
+        queryWrapper.eq(ObjUtil.isNotEmpty(status), "status", status);
+        queryWrapper.eq(ObjUtil.isNotEmpty(categoryId), "categoryId", categoryId);
+        // 对 searchText 的多个条件用 or() 分组
+        if (StrUtil.isNotBlank(searchText)) {
+            queryWrapper.and(qw -> qw
+                    .like("spaceName", searchText)
+                    .or().like("description", searchText)
+            );
+        }
 
         // 排序
         queryWrapper.orderBy(StrUtil.isNotEmpty(sortField), sortOrder.equals("ascend"), sortField);
@@ -155,6 +201,19 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             User user = userService.getById(userId);
             UserVO userVO = userService.getUserVO(user);
             spaceVO.setUser(userVO);
+        }
+        // 关联查询分类名
+        Long categoryId = space.getCategoryId();
+        if (categoryId != null && categoryId > 0) {
+            Category category = categoryService.getById(categoryId);
+            if (category != null) {
+                spaceVO.setCategoryName(category.getCategory());
+            }
+        }
+        // 计算帖子数量
+        if (space.getSpaceType() != null && space.getSpaceType() == 2) {
+            Long count = postMapper.selectCount(new QueryWrapper<Post>().eq("spaceId", space.getId()));
+            spaceVO.setPostNum(count == null ? 0 : count.intValue());
         }
         return spaceVO;
     }
@@ -245,6 +304,15 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                     throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间级别不能为空");
                 }
             }
+            // 社区空间（花田）校验
+            if (spaceTypeEnum == SpaceTypeEnum.FIELD) {
+                if (space.getStatus() == null) {
+                    throw new BusinessException(ErrorCode.PARAMS_ERROR, "社区状态不能为空");
+                }
+                if (space.getStatus() == 2 && StrUtil.isBlank(space.getPassword())) {
+                    throw new BusinessException(ErrorCode.PARAMS_ERROR, "加密社区必须设置密码");
+                }
+            }
         }
         // 修改数据时，如果要改空间级别
         if(spaceTypeEnum==SpaceTypeEnum.PRIVATE||spaceTypeEnum==SpaceTypeEnum.TEAM){
@@ -254,6 +322,12 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
         if (StrUtil.isNotBlank(spaceName) && spaceName.length() > 30) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间名称过长");
+        }
+        // 修改社区加密状态时密码必填
+        if (space.getStatus() != null && space.getStatus() == 2 && spaceTypeEnum == SpaceTypeEnum.FIELD) {
+            if (StrUtil.isBlank(space.getPassword())) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "加密社区必须设置密码");
+            }
         }
         // 修改数据时，如果要改空间级别
         if (spaceType != null && spaceTypeEnum == null) {
@@ -291,6 +365,214 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         if (!space.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
+    }
+
+    @Override
+    public boolean joinSpace(SpaceJoinRequest spaceJoinRequest, User loginUser) {
+        if (spaceJoinRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        Long spaceId = spaceJoinRequest.getSpaceId();
+        Space space = getCommunitySpaceById(spaceId);
+        Integer status = space.getStatus();
+        // 私有禁止加入
+        if (status != null && status == 1) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "禁止加入私有社区");
+        }
+        // 加密需要密码
+        String password = spaceJoinRequest.getPassword();
+        if (status != null && status == 2) {
+            if (StrUtil.isBlank(password) || !password.equals(space.getPassword())) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "密码错误");
+            }
+        }
+        return doJoinSpace(space, loginUser);
+    }
+
+    @Override
+    public boolean joinPrivateSpace(SpaceJoinRequest spaceJoinRequest, User loginUser) {
+        if (spaceJoinRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        Long spaceId = spaceJoinRequest.getSpaceId();
+        Space space = getCommunitySpaceById(spaceId);
+        return doJoinSpace(space, loginUser);
+    }
+
+    /**
+     * 加入社区空间的公共逻辑
+     */
+    private boolean doJoinSpace(Space space, User loginUser) {
+        long userId = loginUser.getId();
+        Long spaceId = space.getId();
+        // 只有一个线程能获取到锁
+        RLock lock = redissonClient.getLock("happy:join_space");
+        try {
+            while (true) {
+                if (lock.tryLock(0, -1, TimeUnit.MILLISECONDS)) {
+                    // 已加入的社区数量限制
+                    QueryWrapper<SpaceUser> countWrapper = new QueryWrapper<>();
+                    countWrapper.eq("userId", userId);
+                    long hasJoinNum = spaceUserService.count(countWrapper);
+                    if (hasJoinNum > 1000) {
+                        throw new BusinessException(ErrorCode.PARAMS_ERROR, "最多创建和加入 1000 个社区");
+                    }
+                    // 不能重复加入
+                    countWrapper = new QueryWrapper<>();
+                    countWrapper.eq("userId", userId);
+                    countWrapper.eq("spaceId", spaceId);
+                    long hasUserJoinSpace = spaceUserService.count(countWrapper);
+                    if (hasUserJoinSpace > 0) {
+                        throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户已加入该社区");
+                    }
+                    // 已加入的人数上限
+                    long spaceHasJoinNum = countSpaceUserBySpaceId(spaceId);
+                    if (space.getMaxNum() != null && spaceHasJoinNum >= space.getMaxNum()) {
+                        throw new BusinessException(ErrorCode.PARAMS_ERROR, "社区已满");
+                    }
+                    // 写入空间用户关联（浏览者）
+                    SpaceUser spaceUser = new SpaceUser();
+                    spaceUser.setUserId(userId);
+                    spaceUser.setSpaceId(spaceId);
+                    //若是公开空间
+                    if(space.getStatus()==0){
+                        spaceUser.setSpaceRole(SpaceRoleEnum.MEMBER.getValue());
+                    }else {
+                        spaceUser.setSpaceRole(SpaceRoleEnum.VIEWER.getValue());
+                    }
+                    boolean saved = spaceUserService.save(spaceUser);
+                    // 加入社区 +1 分
+                    if (saved) {
+                        userFieldScoreService.addScore(userId, spaceId, 1.0);
+                    }
+                    return saved;
+                }
+            }
+        } catch (InterruptedException e) {
+            log.error("joinSpace error", e);
+            return false;
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
+
+    @Override
+    public boolean quitSpace(SpaceQuitRequest spaceQuitRequest, User loginUser) {
+        if (spaceQuitRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        Long spaceId = spaceQuitRequest.getSpaceId();
+        Space space = getCommunitySpaceById(spaceId);
+        long userId = loginUser.getId();
+        QueryWrapper<SpaceUser> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("userId", userId);
+        queryWrapper.eq("spaceId", spaceId);
+        long count = spaceUserService.count(queryWrapper);
+        if (count == 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "未加入社区");
+        }
+        long spaceHasJoinNum = countSpaceUserBySpaceId(spaceId);
+        // 社区只剩一人，解散
+        if (spaceHasJoinNum == 1) {
+            this.removeById(spaceId);
+        } else if (Objects.equals(space.getUserId(), userId)) {
+            // 是创建人（队长），把社区转移给最早加入的用户
+            QueryWrapper<SpaceUser> userFieldQueryWrapper = new QueryWrapper<>();
+            userFieldQueryWrapper.eq("spaceId", spaceId);
+            userFieldQueryWrapper.last("order by id asc limit 2");
+            List<SpaceUser> spaceUserList = spaceUserService.list(userFieldQueryWrapper);
+            if (CollUtil.isEmpty(spaceUserList) || spaceUserList.size() <= 1) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+            }
+            SpaceUser nextUser = spaceUserList.get(1);
+            long nextLeaderId = nextUser.getUserId();
+            Space updateSpace = new Space();
+            updateSpace.setId(spaceId);
+            updateSpace.setUserId(nextLeaderId);
+            boolean updated = this.updateById(updateSpace);
+            if (!updated) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "更新社区创建人失败");
+            }
+        }
+        // 移除成员关系
+        boolean result = spaceUserService.remove(queryWrapper);
+        // 退出社区 -3.0 分
+        if (result) {
+            userFieldScoreService.addScore(userId, spaceId, -3.0);
+        }
+        return result;
+    }
+
+    @Override
+    public List<SpaceVO> listCommunitySpaces(SpaceQueryRequest spaceQueryRequest, boolean isAdmin) {
+        if (spaceQueryRequest == null) {
+            return new ArrayList<>();
+        }
+        QueryWrapper<Space> queryWrapper = getQueryWrapper(spaceQueryRequest);
+        // 只查询社区空间
+        queryWrapper.eq("spaceType", SpaceTypeEnum.FIELD.getValue());
+        // 非管理员只能看公开社区的翻看（私有/加密社区在 status 过滤中处理）
+        List<Space> spaceList = this.list(queryWrapper);
+        List<SpaceVO> spaceVOList = new ArrayList<>();
+        for (Space space : spaceList) {
+            Long userId = space.getUserId();
+            if (userId == null) {
+                continue;
+            }
+            SpaceVO spaceVO = this.getSpaceVO(space, null);
+            spaceVOList.add(spaceVO);
+        }
+        return spaceVOList;
+    }
+
+    @Override
+    public List<User> getSpaceMemberList(Long spaceId, String searchText) {
+        if (spaceId == null || spaceId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        QueryWrapper<SpaceUser> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("spaceId", spaceId);
+        List<SpaceUser> spaceUserList = spaceUserService.list(queryWrapper);
+        List<Long> userIdList = spaceUserList.stream().map(SpaceUser::getUserId).collect(Collectors.toList());
+        if (userIdList.isEmpty()) {
+            return new ArrayList<>();
+        }
+        QueryWrapper<User> queryWrapper1 = new QueryWrapper<>();
+        queryWrapper1.in("id", userIdList);
+        if (searchText != null && !searchText.isEmpty()) {
+            queryWrapper1.and(qw -> qw
+                    .like("userName", searchText)
+                    .or().like("userAccount", searchText)
+                    .or().eq("id", searchText)
+            );
+        }
+        List<User> userList = userService.list(queryWrapper1);
+        if (userList == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
+        }
+        return userList;
+    }
+
+    /**
+     * 获取社区空间（花田）实体
+     */
+    private Space getCommunitySpaceById(Long spaceId) {
+        if (spaceId == null || spaceId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        Space space = this.getById(spaceId);
+        if (space == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "社区不存在");
+        }
+        return space;
+    }
+
+    private long countSpaceUserBySpaceId(long spaceId) {
+        QueryWrapper<SpaceUser> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("spaceId", spaceId);
+        return spaceUserService.count(queryWrapper);
     }
 
 

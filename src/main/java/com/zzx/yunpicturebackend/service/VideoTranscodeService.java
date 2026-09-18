@@ -97,6 +97,8 @@ public class VideoTranscodeService {
                 // 4. 上传转码版（与原文件同目录，扩展名 .mp4）
                 String transcodedKey = FileUtil.mainName(originKey) + ".mp4";
                 cosManager.putObject(transcodedKey, tempTranscoded);
+                // 转码产物同样设为私有读（防下载）
+                cosManager.setObjectPrivate(transcodedKey);
 
                 // 5. 更新 DB（url、format、size），再删除旧对象
                 File update = new File();

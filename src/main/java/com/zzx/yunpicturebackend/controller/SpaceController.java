@@ -1,5 +1,7 @@
 package com.zzx.yunpicturebackend.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zzx.yunpicturebackend.annotation.AuthCheck;
 import com.zzx.yunpicturebackend.common.BaseResponse;
@@ -12,14 +14,21 @@ import com.zzx.yunpicturebackend.exception.ThrowUtils;
 import com.zzx.yunpicturebackend.manager.auth.SpaceUserAuthManager;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceAddRequest;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceEditRequest;
+import com.zzx.yunpicturebackend.model.dto.space.SpaceJoinRequest;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceQueryRequest;
+import com.zzx.yunpicturebackend.model.dto.space.SpaceQuitRequest;
 import com.zzx.yunpicturebackend.model.dto.space.SpaceUpdateRequest;
+import com.zzx.yunpicturebackend.model.entity.Category;
 import com.zzx.yunpicturebackend.model.entity.Space;
+import com.zzx.yunpicturebackend.model.entity.SpaceUser;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.zzx.yunpicturebackend.model.enums.SpaceLevelEnum;
+import com.zzx.yunpicturebackend.model.enums.SpaceTypeEnum;
 import com.zzx.yunpicturebackend.model.vo.SpaceLevel;
 import com.zzx.yunpicturebackend.model.vo.SpaceVO;
+import com.zzx.yunpicturebackend.service.CategoryService;
 import com.zzx.yunpicturebackend.service.SpaceService;
+import com.zzx.yunpicturebackend.service.SpaceUserService;
 import com.zzx.yunpicturebackend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -27,9 +36,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 @RestController
 @Slf4j
@@ -41,6 +48,10 @@ public class SpaceController {
     private UserService userService;
     @Resource
     private SpaceUserAuthManager spaceUserAuthManager;
+    @Resource
+    private SpaceUserService spaceUserService;
+    @Resource
+    private CategoryService categoryService;
     @PostMapping("/add")
     //@AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Long> addSpace(SpaceAddRequest spaceAddRequest, HttpServletRequest request) {
@@ -176,7 +187,10 @@ public class SpaceController {
         //ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR);
         SpaceVO spaceVO = spaceService.getSpaceVO(space, request);
         User loginUser = userService.getLoginUser(request);
-        List<String> permissionList = spaceUserAuthManager.getPermissionList(null,space, loginUser);
+        List<String> permissionList =spaceUserAuthManager.getPermissionList(null,space, loginUser);
+        if(permissionList.isEmpty() && space.getSpaceType() == SpaceTypeEnum.FIELD.getValue() && space.getStatus() == 0){
+            permissionList.add("post:view");
+        }
         spaceVO.setPermissionList(permissionList);
         // 获取封装类
         return ResultUtils.success(spaceVO);
@@ -194,5 +208,155 @@ public class SpaceController {
                 spaceService.getQueryWrapper(spaceQueryRequest));
         // 获取封装类
         return ResultUtils.success(spaceService.getSpaceVOPage(spacePage, request));
+    }
+
+    /**
+     * 查询社区空间分类列表
+     */
+    @GetMapping("/category")
+    public BaseResponse<List<Category>> listCategory() {
+        List<Category> categories = categoryService.lambdaQuery()
+                .eq(Category::getStatus, 1)
+                .orderByAsc(Category::getSort)
+                .list();
+        return ResultUtils.success(categories);
+    }
+
+    /**
+     * 获取社区空间的成员列表
+     */
+    @GetMapping("/getMemberList")
+    public BaseResponse<List<User>> getSpaceMemberListById(Long id, @RequestParam(required = false) String searchText) {
+        return ResultUtils.success(spaceService.getSpaceMemberList(id, searchText));
+    }
+
+    /**
+     * 社区空间列表（相当于花田列表）
+     */
+    @GetMapping("/list")
+    public BaseResponse<List<SpaceVO>> listSpaces(SpaceQueryRequest spaceQueryRequest, HttpServletRequest request) {
+        if (spaceQueryRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        // 只查社区空间
+        spaceQueryRequest.setSpaceType(SpaceTypeEnum.FIELD.getValue());
+        List<SpaceVO> spaceVOList = spaceService.listCommunitySpaces(spaceQueryRequest, userService.isAdmin(loginUser));
+        // 填充是否已加入 / 已加入人数
+        fillJoinInfo(spaceVOList, loginUser);
+        return ResultUtils.success(spaceVOList);
+    }
+
+    /**
+     * 我创建的社区（花田）
+     */
+    @GetMapping("/list/my/create")
+    public BaseResponse<List<SpaceVO>> listMyCreateSpaces(SpaceQueryRequest spaceQueryRequest, HttpServletRequest request) {
+        if (spaceQueryRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        spaceQueryRequest.setUserId(loginUser.getId());
+        spaceQueryRequest.setSpaceType(SpaceTypeEnum.FIELD.getValue());
+        List<SpaceVO> spaceVOList = spaceService.listCommunitySpaces(spaceQueryRequest, true);
+        fillJoinInfo(spaceVOList, loginUser);
+        return ResultUtils.success(spaceVOList);
+    }
+
+    /**
+     * 我加入的社区（花田）
+     */
+    @GetMapping("/list/my/join")
+    public BaseResponse<List<SpaceVO>> listMyJoinSpaces(SpaceQueryRequest spaceQueryRequest, HttpServletRequest request) {
+        if (spaceQueryRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        QueryWrapper<SpaceUser> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("userId", loginUser.getId());
+        List<SpaceUser> spaceUserList = spaceUserService.list(queryWrapper);
+        List<Long> idList = spaceUserList.stream()
+                .map(SpaceUser::getSpaceId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(idList)) {
+            return ResultUtils.success(new ArrayList<>());
+        }
+        spaceQueryRequest.setIdList(idList);
+        spaceQueryRequest.setSpaceType(SpaceTypeEnum.FIELD.getValue());
+        List<SpaceVO> spaceVOList = spaceService.listCommunitySpaces(spaceQueryRequest, true);
+        fillJoinInfo(spaceVOList, loginUser);
+        return ResultUtils.success(spaceVOList);
+    }
+
+    /**
+     * 加入社区（公开/加密）
+     */
+    @PostMapping("/join")
+    public BaseResponse<Boolean> joinSpace(@RequestBody SpaceJoinRequest spaceJoinRequest, HttpServletRequest request) {
+        if (spaceJoinRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        boolean result = spaceService.joinSpace(spaceJoinRequest, loginUser);
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 加入私有社区（邀请）
+     */
+    @PostMapping("/join/private")
+    public BaseResponse<Boolean> joinPrivateSpace(@RequestBody SpaceJoinRequest spaceJoinRequest, HttpServletRequest request) {
+        if (spaceJoinRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        boolean result = spaceService.joinPrivateSpace(spaceJoinRequest, loginUser);
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 退出社区
+     */
+    @PostMapping("/quit")
+    public BaseResponse<Boolean> quitSpace(@RequestBody SpaceQuitRequest spaceQuitRequest, HttpServletRequest request) {
+        if (spaceQuitRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        boolean result = spaceService.quitSpace(spaceQuitRequest, loginUser);
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 填充社区列表的 hasJoin / hasJoinNum
+     */
+    private void fillJoinInfo(List<SpaceVO> spaceVOList, User loginUser) {
+        if (spaceVOList == null || spaceVOList.isEmpty()) {
+            return;
+        }
+        List<Long> spaceIdList = spaceVOList.stream().map(SpaceVO::getId).collect(Collectors.toList());
+        // 判断当前用户是否已加入
+        QueryWrapper<SpaceUser> joinWrapper = new QueryWrapper<>();
+        try {
+            joinWrapper.eq("userId", loginUser.getId());
+            if (CollectionUtils.isNotEmpty(spaceIdList)) {
+                joinWrapper.in("spaceId", spaceIdList);
+            }
+            List<SpaceUser> myJoinList = spaceUserService.list(joinWrapper);
+            Set<Long> hasJoinSpaceIdSet = myJoinList.stream().map(SpaceUser::getSpaceId).collect(Collectors.toSet());
+            spaceVOList.forEach(vo -> vo.setHasJoin(hasJoinSpaceIdSet.contains(vo.getId())));
+        } catch (Exception e) {
+            log.error("fillJoinInfo hasJoin error", e);
+        }
+        // 查询每个社区的加入人数
+        QueryWrapper<SpaceUser> countWrapper = new QueryWrapper<>();
+        if (CollectionUtils.isNotEmpty(spaceIdList)) {
+            countWrapper.in("spaceId", spaceIdList);
+        }
+        List<SpaceUser> joinUserList = spaceUserService.list(countWrapper);
+        Map<Long, Long> countMap = joinUserList.stream()
+                .collect(Collectors.groupingBy(SpaceUser::getSpaceId, Collectors.counting()));
+        spaceVOList.forEach(vo -> vo.setHasJoinNum(countMap.getOrDefault(vo.getId(), 0L).intValue()));
     }
 }

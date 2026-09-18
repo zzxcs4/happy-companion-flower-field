@@ -3,7 +3,6 @@ package com.zzx.yunpicturebackend.model.dto.picture;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.util.List;
 
 @Data
 public class PictureEditRequest implements Serializable {
@@ -29,10 +28,10 @@ public class PictureEditRequest implements Serializable {
     private String category;
 
 
-    /**  
-     * 标签  
-     */  
-    private List<String> tags;
-  
-    private static final long serialVersionUID = 1L;  
+    /**
+     * 是否允许下载：0-不允许 1-允许（不传则不修改）
+     */
+    private Integer canDownload;
+
+    private static final long serialVersionUID = 1L;
 }

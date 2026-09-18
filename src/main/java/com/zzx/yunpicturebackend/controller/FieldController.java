@@ -19,7 +19,6 @@ import com.zzx.yunpicturebackend.model.entity.UserField;
 import com.zzx.yunpicturebackend.model.entity.User;
 import com.zzx.yunpicturebackend.model.vo.FieldCategoryVO;
 import com.zzx.yunpicturebackend.model.vo.FieldUserVO;
-import com.zzx.yunpicturebackend.model.vo.PictureTagCategory;
 import com.zzx.yunpicturebackend.service.FieldService;
 import com.zzx.yunpicturebackend.service.PostService;
 import com.zzx.yunpicturebackend.service.UserFieldService;
@@ -36,9 +35,14 @@ import javax.servlet.http.HttpServletRequest;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@RestController
-@Slf4j
-@RequestMapping("/field")
+/**
+ * 花田接口（已并入空间接口，废弃停用，请使用 SpaceController）
+ * @Deprecated 社区(花田)概念已融入空间，原 /field/* 接口不再暴露
+ */
+@Deprecated
+//@RestController
+//@Slf4j
+//@RequestMapping("/field")
 public class FieldController {
 
     @Resource

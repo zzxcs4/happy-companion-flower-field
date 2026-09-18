@@ -14,7 +14,8 @@ public interface IFollowService extends IService<Follow> {
 
     BaseResponse<Boolean> isFollow(Long followUserId,HttpServletRequest request);
 
-    BaseResponse<List<User>> followCommons(Long id,HttpServletRequest request);
+    // 共同关注：Redis 缓存与实现已注释（暂未启用），接口声明一并注释，避免实现类未实现抽象方法
+    // BaseResponse<List<User>> followCommons(Long id,HttpServletRequest request);
 
     List<User> follows(Long userId);
 

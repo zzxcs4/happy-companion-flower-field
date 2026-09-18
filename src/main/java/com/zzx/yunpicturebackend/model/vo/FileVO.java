@@ -1,13 +1,11 @@
 package com.zzx.yunpicturebackend.model.vo;
 
-import cn.hutool.json.JSONUtil;
 import com.zzx.yunpicturebackend.model.entity.File;
 import lombok.Data;
 import org.springframework.beans.BeanUtils;
 
 import java.io.Serializable;
 import java.util.Date;
-import java.util.List;
 
 @Data
 public class FileVO implements Serializable {
@@ -36,11 +34,6 @@ public class FileVO implements Serializable {
      * 简介
      */
     private String introduction;
-
-    /**
-     * 标签
-     */
-    private List<String> tags;
 
     /**
      * 分类
@@ -123,6 +116,11 @@ public class FileVO implements Serializable {
     private String summary;
 
     /**
+     * 是否允许下载：0-不允许 1-允许（默认允许，发布帖子时可选）
+     */
+    private Integer canDownload;
+
+    /**
      * 创建用户信息
      */
     private UserVO user;
@@ -138,7 +136,6 @@ public class FileVO implements Serializable {
         }
         File file = new File();
         BeanUtils.copyProperties(fileVO, file);
-        file.setTags(JSONUtil.toJsonStr(fileVO.getTags()));
         return file;
     }
 
@@ -151,7 +148,6 @@ public class FileVO implements Serializable {
         }
         FileVO fileVO = new FileVO();
         BeanUtils.copyProperties(file, fileVO);
-        fileVO.setTags(JSONUtil.toList(file.getTags(), String.class));
         return fileVO;
     }
 }

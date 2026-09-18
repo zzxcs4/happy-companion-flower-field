@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.exception.ThrowUtils;
+import com.zzx.yunpicturebackend.manager.CosManager;
 import com.zzx.yunpicturebackend.manager.SpaceCapacityManager;
 import com.zzx.yunpicturebackend.manager.upload.FileUpload;
 import com.zzx.yunpicturebackend.mapper.FileMapper;
@@ -48,6 +49,10 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File>
     private AudioCompressService audioCompressService;
     @Resource
     private VideoTranscodeService videoTranscodeService;
+    @Resource
+    private CosManager cosManager;
+    /** 私有视频签名 URL 有效期（秒）：12 小时 */
+    private static final long SIGN_URL_EXPIRE_SECONDS = 12 * 60 * 60L;
 
     @Override
     public FileVO uploadFile(MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest, User loginUser) {
@@ -93,6 +98,15 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File>
         // 上传文件（通用，支持各种格式）
         UploadFileResult uploadResult = fileUpload.uploadFile(multipartFile, uploadPathPrefix);
 
+        // 视频对象设为私有读（防下载），前端通过临时签名 URL 播放
+        if (videoTranscodeService.isVideoFormat(uploadResult.getFormat())) {
+            String host = cosManager.getCosClientConfig().getHost();
+            String url = uploadResult.getUrl();
+            String key = url.startsWith(host) ? url.substring(host.length()) : url;
+            key = "/" + key.replaceAll("^/+", "");
+            cosManager.setObjectPrivate(key);
+        }
+
         // 构造入库对象
         File file = new File();
         file.setSpaceId(spaceId);
@@ -105,6 +119,10 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File>
         file.setSize(uploadResult.getSize());
         file.setFormat(uploadResult.getFormat());
         file.setUserId(loginUser.getId());
+        // 是否允许下载：0-不允许 1-允许（不传则保持默认允许）
+        if (pictureUploadRequest != null && pictureUploadRequest.getCanDownload() != null) {
+            file.setCanDownload(pictureUploadRequest.getCanDownload());
+        }
 
         fillReviewParams(spaceId, file, loginUser);
 
@@ -138,7 +156,13 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File>
             videoTranscodeService.transcodeAsync(file.getId());
         }
 
-        return FileVO.objToVo(file);
+        FileVO fileVO = FileVO.objToVo(file);
+        // 私有视频返回前端前转为临时签名 URL（12 小时有效期）
+        if (fileVO != null && StrUtil.isNotBlank(fileVO.getUrl())
+                && videoTranscodeService.isVideoFormat(file.getFormat())) {
+            fileVO.setUrl(cosManager.signCosUrl(fileVO.getUrl(), SIGN_URL_EXPIRE_SECONDS));
+        }
+        return fileVO;
     }
 
     @Override

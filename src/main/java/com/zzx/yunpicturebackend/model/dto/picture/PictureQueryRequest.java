@@ -6,7 +6,6 @@ import lombok.EqualsAndHashCode;
 
 import java.io.Serializable;
 import java.util.Date;
-import java.util.List;
 
 @EqualsAndHashCode(callSuper = true)
 @Data
@@ -33,11 +32,6 @@ public class PictureQueryRequest extends PageRequest implements Serializable {
     private String category;  
   
     /**  
-     * 标签  
-     */  
-    private List<String> tags;
-  
-    /**  
      * 文件体积  
      */  
     private Long picSize;  
@@ -57,10 +51,15 @@ public class PictureQueryRequest extends PageRequest implements Serializable {
      */  
     private Double picScale;  
   
-    /**  
-     * 图片格式  
-     */  
-    private String picFormat;  
+    /**
+     * 图片格式
+     */
+    private String picFormat;
+
+    /**
+     * 文件类型：image-图片 video-视频 audio-音频（按文件后缀归类）
+     */
+    private String fileType;
   
     /**  
      * 搜索词（同时搜名称、简介等）  

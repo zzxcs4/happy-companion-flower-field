@@ -24,6 +24,12 @@ public interface VideosService extends IService<com.zzx.yunpicturebackend.model.
 
     BaseResponse<VideoVO> IdempotentMultipartUploader(File file, Long spaceId, String md5, Long videoId,HttpServletRequest request);
 
+    /**
+     * 分块上传（幂等，支持断点续传），登录用户直接传入，不依赖 request
+     * 供帖子视频上传等已持有 loginUser 的场景复用
+     */
+    BaseResponse<VideoVO> IdempotentMultipartUploader(File file, Long spaceId, String md5, Long videoId, User loginUser);
+
     void editFile(PictureEditRequest pictureEditRequest, User loginUser);
 
     void fillReviewParams(Long spaceId, com.zzx.yunpicturebackend.model.entity.File file, User loginUser);

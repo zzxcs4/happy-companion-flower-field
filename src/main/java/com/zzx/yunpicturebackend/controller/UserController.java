@@ -100,13 +100,12 @@ public class UserController {
     /**
      * 访问社区时自动签到
      * @param userId 用户 id
-     * @param fieldId 花田 id
-     * @param spaceId 空间 id
+     * @param spaceId 社区空间 id
      * @return
      */
     @PostMapping("/sign/auto")
-    public BaseResponse<Boolean> autoSign(@RequestParam Long userId, @RequestParam Long fieldId, @RequestParam Long spaceId) {
-        userService.autoSignOnVisit(userId, fieldId, spaceId);
+    public BaseResponse<Boolean> autoSign(@RequestParam Long userId, @RequestParam Long spaceId) {
+        userService.autoSignOnVisit(userId, spaceId);
         return ResultUtils.success(true);
     }
     

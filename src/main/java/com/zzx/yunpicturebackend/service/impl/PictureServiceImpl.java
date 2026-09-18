@@ -4,7 +4,6 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -26,6 +25,7 @@ import com.zzx.yunpicturebackend.model.dto.picture.*;
 import com.zzx.yunpicturebackend.model.entity.File;
 import com.zzx.yunpicturebackend.model.entity.Space;
 import com.zzx.yunpicturebackend.model.entity.User;
+import com.zzx.yunpicturebackend.model.enums.FileTypeEnum;
 import com.zzx.yunpicturebackend.model.enums.PictureReviewStatusEnum;
 import com.zzx.yunpicturebackend.model.vo.PictureVO;
 import com.zzx.yunpicturebackend.model.vo.UserVO;
@@ -61,6 +61,13 @@ import java.util.stream.Collectors;
 @Slf4j
 public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
     implements PictureService{
+
+    /** 私有视频签名 URL 有效期（秒）：12 小时 */
+    private static final long SIGN_URL_EXPIRE_SECONDS = 12 * 60 * 60L;
+    /** 视频扩展名（与前端 isVideo / FileController.VIDEO_FORMATS 保持一致） */
+    private static final List<String> VIDEO_FORMATS = Arrays.asList(
+            "mp4", "avi", "mov", "wmv", "flv", "mkv", "webm"
+    );
 
     @Resource
     private UserService userService;
@@ -176,6 +183,10 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
         file.setPicColor(uploadPictureResult.getPicColor());
         file.setFormat(uploadPictureResult.getPicFormat());
         file.setUserId(loginUser.getId());
+        // 是否允许下载：0-不允许 1-允许（不传则保持默认允许）
+        if (pictureUploadRequest != null && pictureUploadRequest.getCanDownload() != null) {
+            file.setCanDownload(pictureUploadRequest.getCanDownload());
+        }
         // 补充审核参数
         fillReviewParams(spaceId, file, loginUser);
         // 如果 pictureId 不为空，表示更新，否则是新增
@@ -189,7 +200,7 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
         transactionTemplate.execute(status -> {
             boolean result = this.saveOrUpdate(file);
             ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "图片上传失败");
-            if( space != null&&(space.getSpaceType()==0||space.getSpaceType()==1)){
+            if( space != null&&(space.getStatus()!=0)){
             if (finalSpaceId != null) {
                 boolean update = spaceService.lambdaUpdate()
                         .eq(Space::getId, finalSpaceId)
@@ -200,7 +211,10 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
             }}
             return file;
         });
-        return PictureVO.objToVo(file);
+        PictureVO pictureVO = PictureVO.objToVo(file);
+        // 私有视频返回前端前转为临时签名 URL（图片保持公有直链）
+        signVideoUrl(pictureVO);
+        return pictureVO;
     }
 
     @Override
@@ -214,7 +228,6 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
         String name = pictureQueryRequest.getName();
         String introduction = pictureQueryRequest.getIntroduction();
         String category = pictureQueryRequest.getCategory();
-        List<String> tags = pictureQueryRequest.getTags();
         Long picSize = pictureQueryRequest.getPicSize();
         Integer picWidth = pictureQueryRequest.getPicWidth();
         Integer picHeight = pictureQueryRequest.getPicHeight();
@@ -250,6 +263,11 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
         queryWrapper.isNull(nullSpaceId, "spaceId");
         queryWrapper.like(StrUtil.isNotBlank(introduction), "introduction", introduction);
         queryWrapper.like(StrUtil.isNotBlank(picFormat), "format", picFormat);
+        // 按文件类型筛选（依据文件后缀归类，如 image 对应 jpg/jpeg/png/webp）
+        FileTypeEnum fileTypeEnum = FileTypeEnum.getEnumByValue(pictureQueryRequest.getFileType());
+        if (fileTypeEnum != null) {
+            queryWrapper.in("format", fileTypeEnum.getFormats());
+        }
         queryWrapper.eq(StrUtil.isNotBlank(category), "category", category);
         queryWrapper.eq(ObjUtil.isNotEmpty(picWidth), "picWidth", picWidth);
         queryWrapper.eq(ObjUtil.isNotEmpty(picHeight), "picHeight", picHeight);
@@ -258,12 +276,6 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
         queryWrapper.eq(ObjUtil.isNotEmpty(reviewStatus), "reviewStatus", reviewStatus);
         queryWrapper.like(StrUtil.isNotBlank(reviewMessage), "reviewMessage", reviewMessage);
         queryWrapper.eq(ObjUtil.isNotEmpty(reviewerId), "reviewerId", reviewerId);
-        // JSON 数组查询
-        if (CollUtil.isNotEmpty(tags)) {
-            for (String tag : tags) {
-                queryWrapper.like("tags", "\"" + tag + "\"");
-            }
-        }
         // 排序
         queryWrapper.orderBy(StrUtil.isNotEmpty(sortField), sortOrder.equals("ascend"), sortField);
         return queryWrapper;
@@ -273,6 +285,8 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
     public PictureVO getPictureVO(File file, HttpServletRequest request) {
         // 对象转封装类
         PictureVO pictureVO = PictureVO.objToVo(file);
+        // 私有视频转临时签名 URL（图片保持公有直链）
+        signVideoUrl(pictureVO);
         // 关联查询用户信息
         Long userId = file.getUserId();
         if (userId != null && userId > 0) {
@@ -281,6 +295,34 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
             pictureVO.setUser(userVO);
         }
         return pictureVO;
+    }
+
+    /**
+     * 将 PictureVO 中的视频 URL 转为临时签名 URL（防直接下载）。
+     * 仅处理本站 COS 视频对象（对象已设为私有读）；图片/外链保持原样。
+     */
+    private void signVideoUrl(PictureVO pictureVO) {
+        if (pictureVO == null || StrUtil.isBlank(pictureVO.getUrl())) {
+            return;
+        }
+        String url = pictureVO.getUrl();
+        if (isVideoUrl(url)) {
+            pictureVO.setUrl(cosManager.signCosUrl(url, SIGN_URL_EXPIRE_SECONDS));
+        }
+    }
+
+    /**
+     * 判断 URL 是否为视频（按扩展名，与前端 isVideo 保持一致）
+     */
+    private boolean isVideoUrl(String url) {
+        int qIdx = url.indexOf('?');
+        String path = qIdx >= 0 ? url.substring(0, qIdx) : url;
+        int dotIdx = path.lastIndexOf('.');
+        if (dotIdx < 0 || dotIdx == path.length() - 1) {
+            return false;
+        }
+        String ext = path.substring(dotIdx + 1).toLowerCase();
+        return VIDEO_FORMATS.contains(ext);
     }
 
     /**
@@ -301,6 +343,8 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
                 .collect(Collectors.groupingBy(User::getId));
         // 2. 填充信息
         pictureVOList.forEach(pictureVO -> {
+            // 私有视频转临时签名 URL
+            signVideoUrl(pictureVO);
             Long userId = pictureVO.getUserId();
             User user = null;
             if (userIdUserListMap.containsKey(userId)) {
@@ -479,8 +523,6 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
         // 在此处将实体类和 DTO 进行转换
         File file = new File();
         BeanUtils.copyProperties(pictureEditRequest, file);
-        // 注意将 list 转为 string
-        file.setTags(JSONUtil.toJsonStr(pictureEditRequest.getTags()));
         // 设置编辑时间
         file.setEditTime(new Date());
         // 数据校验
@@ -576,6 +618,7 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
         // 转换为 PictureVO
         return sortedFiles.stream()
                 .map(PictureVO::objToVo)
+                .peek(this::signVideoUrl)
                 .collect(Collectors.toList());
     }
 
@@ -585,7 +628,6 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
         List<Long> pictureIdList = pictureEditByBatchRequest.getPictureIdList();
         Long spaceId = pictureEditByBatchRequest.getSpaceId();
         String category = pictureEditByBatchRequest.getCategory();
-        List<String> tags = pictureEditByBatchRequest.getTags();
         // 批量重命名
         String nameRule = pictureEditByBatchRequest.getNameRule();
 
@@ -610,13 +652,10 @@ public class PictureServiceImpl extends ServiceImpl<FileMapper, File>
         if (fileList.isEmpty()) {
             return;
         }
-        // 4. 更新分类和标签
+        // 4. 更新分类
         fileList.forEach(picture -> {
             if (StrUtil.isNotBlank(category)) {
                 picture.setCategory(category);
-            }
-            if (CollUtil.isNotEmpty(tags)) {
-                picture.setTags(JSONUtil.toJsonStr(tags));
             }
         });
         fillPictureWithNameRule(fileList, nameRule);

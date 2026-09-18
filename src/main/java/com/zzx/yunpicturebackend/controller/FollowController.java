@@ -42,8 +42,8 @@ public class FollowController {
         return ResultUtils.success(followService.fans(followUserId));
     }
 
-    @GetMapping("/common/{id}")
-    public BaseResponse<List<User>> followCommons(@PathVariable("id") Long id,HttpServletRequest request){
-        return followService.followCommons(id,request);
-    }
+//    @GetMapping("/common/{id}")
+//    public BaseResponse<List<User>> followCommons(@PathVariable("id") Long id,HttpServletRequest request){
+//        return followService.followCommons(id,request);
+//    }
 }

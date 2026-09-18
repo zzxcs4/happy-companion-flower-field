@@ -1,6 +1,5 @@
 package com.zzx.yunpicturebackend.model.vo;
 
-import cn.hutool.json.JSONUtil;
 import com.zzx.yunpicturebackend.model.entity.File;
 import lombok.Data;
 import org.springframework.beans.BeanUtils;
@@ -37,11 +36,6 @@ public class VideoVO implements Serializable {
      * 简介
      */
     private String introduction;
-
-    /**
-     * 标签
-     */
-    private List<String> tags;
 
     /**
      * 分类
@@ -105,8 +99,6 @@ public class VideoVO implements Serializable {
         }
         File file = new File();
         BeanUtils.copyProperties(pictureVO, file);
-        // 类型不同，需要转换
-        file.setTags(JSONUtil.toJsonStr(pictureVO.getTags()));
         return file;
     }
 
@@ -119,8 +111,6 @@ public class VideoVO implements Serializable {
         }
         com.zzx.yunpicturebackend.model.vo.VideoVO pictureVO = new com.zzx.yunpicturebackend.model.vo.VideoVO();
         BeanUtils.copyProperties(file, pictureVO);
-        // 类型不同，需要转换
-        pictureVO.setTags(JSONUtil.toList(file.getTags(), String.class));
         return pictureVO;
     }
 }

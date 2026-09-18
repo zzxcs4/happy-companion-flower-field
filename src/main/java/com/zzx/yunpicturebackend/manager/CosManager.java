@@ -15,8 +15,10 @@ import org.springframework.stereotype.Component;
 import javax.annotation.Resource;
 import java.io.File;
 import java.io.InputStream;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -113,6 +115,57 @@ public class CosManager {
      */
     public void deleteObject(String key) throws CosClientException {
         cosClient.deleteObject(cosClientConfig.getBucket(), key);
+    }
+
+    /**
+     * 将对象设置为私有读（仅视频等需防下载的媒体使用）
+     *
+     * @param key 文件 key（与上传时一致）
+     */
+    public void setObjectPrivate(String key) {
+        try {
+            cosClient.setObjectAcl(cosClientConfig.getBucket(), key, CannedAccessControlList.Private);
+        } catch (CosClientException e) {
+            log.warn("设置对象私有权限失败, key={}, 原因={}", key, e.getMessage());
+        }
+    }
+
+    /**
+     * 生成对象临时签名 URL（私有对象可通过签名 URL 访问，有效期后失效）
+     *
+     * @param key          对象 key（如 /space/xxx/xxx.mp4）
+     * @param expireSeconds 有效期（秒）
+     * @return 带签名的可访问 URL
+     */
+    public String generatePresignedUrl(String key, long expireSeconds) {
+        Date expiration = new Date(System.currentTimeMillis() + expireSeconds * 1000);
+        URL url = cosClient.generatePresignedUrl(cosClientConfig.getBucket(), key, expiration);
+        return url.toString();
+    }
+
+    /**
+     * 将本站 COS 完整 URL 转为临时签名 URL（仅对本 COS 域名生效，其他 URL 原样返回）。
+     * 用于私有读对象（视频）返回给前端播放；图片等公有对象不受影响，原样返回。
+     *
+     * @param url           完整 COS URL（如 https://host//space/xxx/xxx.mp4）
+     * @param expireSeconds 有效期（秒）
+     * @return 签名 URL 或原 URL
+     */
+    public String signCosUrl(String url, long expireSeconds) {
+        if (url == null || url.isEmpty()) {
+            return url;
+        }
+        String host = cosClientConfig.getHost();
+        if (!url.startsWith(host)) {
+            return url;
+        }
+        // 剥离 query 参数（防止对已签名 URL 二次签名时把 query 误当作 key 的一部分）
+        int qIdx = url.indexOf('?');
+        String path = qIdx >= 0 ? url.substring(0, qIdx) : url;
+        // 提取 key：去掉 host 前缀后，将前导斜杠压缩为单个（与上传 key 格式一致）
+        String key = path.substring(host.length());
+        key = "/" + key.replaceAll("^/+", "");
+        return generatePresignedUrl(key, expireSeconds);
     }
     /**
      * 判断对象是否存在

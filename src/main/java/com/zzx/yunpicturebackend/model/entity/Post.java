@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.util.Date;
+import java.util.List;
+
 import lombok.Data;
 
 /**
@@ -21,9 +23,9 @@ public class Post {
     private Long id;
 
     /**
-     * 花田id
+     * 所属社区空间id（即原花田）
      */
-    private Long fieldId;
+    private Long spaceId;
 
     /**
      * 用户id
@@ -75,6 +77,11 @@ public class Post {
      */
     private Integer comments;
 
+    /**
+     * 权限列表
+     */
+    @TableField(exist = false)
+    private List<String> permissionsList;
     /**
      * 创建时间
      */

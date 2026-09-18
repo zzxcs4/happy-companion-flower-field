@@ -20,6 +20,7 @@ import jodd.util.StringUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -61,31 +62,44 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
 
 
 
+    /**
+     * 发表评论：评论计数、评论记录、评论积分为一个原子事务，
+     * 任一步失败整体回滚，避免"评论数已 +1 但评论没插入"等不一致。
+     * （Redis 每日计数 increment 不参与 DB 事务，仅作当天加分频控，多计一次可接受）
+     */
     @Override
-    public synchronized BaseResponse<Boolean> publish(Comment comment) {
+    @Transactional(rollbackFor = Exception.class)
+    public BaseResponse<Boolean> publish(Comment comment) {
         comment.setCreateTime(new Date());
         comment.setUpdateTime(new Date());
         Post post = postService.getById(comment.getPost());
-        post.setComments(post.getComments() + 1);
-        postService.updateById(post);
+        if (post != null) {
+            // 原子自增评论数，避免并发丢失更新（多实例部署下 synchronized 无效）
+            postService.update().setSql("comments = comments + 1").eq("id", comment.getPost()).update();
+        }
         commentMapper.insert(comment);
         // 评论 +0.3 分（每天 1 次）
-        if (comment.getPublisher() != null && post.getFieldId() != null) {
+        if (comment.getPublisher() != null && post.getSpaceId() != null) {
             String today = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
-            String dailyCountKey = DAILY_COMMENT_COUNT_KEY + comment.getPublisher() + ":" + post.getFieldId() + ":" + today;
+            String dailyCountKey = DAILY_COMMENT_COUNT_KEY + comment.getPublisher() + ":" + post.getSpaceId() + ":" + today;
             Long count = stringRedisTemplate.opsForValue().increment(dailyCountKey);
             if (count != null && count == 1) {
                 stringRedisTemplate.expire(dailyCountKey, 2, TimeUnit.DAYS);
             }
             if (count != null && count <= 1) {
-                userFieldScoreService.addScore(comment.getPublisher(), post.getFieldId(), 0.3);
+                userFieldScoreService.addScore(comment.getPublisher(), post.getSpaceId(), 0.3);
             }
         }
         return ResultUtils.success(true);
     }
         
+    /**
+     * 删除评论：评论计数、评论记录、积分回滚为同一原子事务，
+     * 任一步失败整体回滚，避免"评论已删但计数未减"或积分未回滚。
+     */
     @Override
-    public synchronized BaseResponse<Boolean> deleteComment(Long commentId) {
+    @Transactional(rollbackFor = Exception.class)
+    public BaseResponse<Boolean> deleteComment(Long commentId) {
         Comment comment = this.getById(commentId);
         if (comment == null) {
             return ResultUtils.success(false);
@@ -93,15 +107,15 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
             
         Post post = postService.getById(comment.getPost());
         if (post != null) {
-            post.setComments(Math.max(0, post.getComments() - 1));
-            postService.updateById(post);
+            // 原子减少评论数（不低于 0），避免并发丢失更新
+            postService.update().setSql("comments = GREATEST(comments - 1, 0)").eq("id", comment.getPost()).update();
         }
             
         boolean result = this.removeById(commentId);
             
         // 删除评论 -0.3 分（仅回滚）
-        if (result && comment.getPublisher() != null && post != null && post.getFieldId() != null) {
-            userFieldScoreService.addScore(comment.getPublisher(), post.getFieldId(), -0.3);
+        if (result && comment.getPublisher() != null && post != null && post.getSpaceId() != null) {
+            userFieldScoreService.addScore(comment.getPublisher(), post.getSpaceId(), -0.3);
         }
             
         return ResultUtils.success(result);

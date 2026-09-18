@@ -19,13 +19,15 @@ public class UserFieldScore {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 用户id */
+    /**
+     * 用户id */
     @TableField(value = "user_id")
     private Long userId;
 
-    /** 花田id */
-    @TableField(value = "field_id")
-    private Long fieldId;
+    /**
+     * 社区空间id（原花田id） */
+    @TableField(value = "space_id")
+    private Long spaceId;
 
     /** 评分（0~10） */
     private Double score;

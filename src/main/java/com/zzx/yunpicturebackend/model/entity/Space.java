@@ -51,9 +51,39 @@ public class Space implements Serializable {
     private Long userId;
 
     /**
-     * 空间类型：0-私有 1-团队
+     * 空间类型：0-私有 1-团队 2-社区
      */
     private Integer spaceType;
+
+    /**
+     * 空间封面图（个人/团队/社区空间均可使用）
+     */
+    private String picUrl;
+
+    /**
+     * 可见状态：0-公开 1-私有 2-加密（仅社区空间使用）
+     */
+    private Integer status;
+
+    /**
+     * 社区密码（仅加密社区空间使用）
+     */
+    private String password;
+
+    /**
+     * 分类id（冗余字段，仅社区空间使用）
+     */
+    private Long categoryId;
+
+    /**
+     * 最大人数（团队/社区空间使用）
+     */
+    private Integer maxNum;
+
+    /**
+     * 描述（社区空间使用）
+     */
+    private String description;
 
 
     /**

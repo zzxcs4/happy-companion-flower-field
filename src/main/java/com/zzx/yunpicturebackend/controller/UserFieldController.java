@@ -30,9 +30,14 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
 
-@RestController
-@RequestMapping("/UserField")
-@Slf4j
+/**
+ * 用户社区关系接口（已并入 SpaceUserController，废弃停用）
+ * @Deprecated 社区成员关系统一由 space_user 承载
+ */
+@Deprecated
+//@RestController
+//@RequestMapping("/UserField")
+//@Slf4j
 public class UserFieldController {
 
     @Resource

@@ -47,11 +47,6 @@ public class File implements Serializable {
     private String category;
 
     /**
-     * 标签（JSON 数组）
-     */
-    private String tags;
-
-    /**
      * 图片体积
      */
     private Long size;
@@ -152,4 +147,10 @@ public class File implements Serializable {
      */
    @Nullable
     private String summary;
+
+    /**
+     * 是否允许下载：0-不允许 1-允许（默认允许，发布帖子时可选）
+     */
+   @Nullable
+    private Integer canDownload;
 }

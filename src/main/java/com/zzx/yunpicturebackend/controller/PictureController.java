@@ -2,7 +2,6 @@ package com.zzx.yunpicturebackend.controller;
 
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import com.zzx.yunpicturebackend.annotation.AuthCheck;
@@ -42,6 +41,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -86,6 +86,7 @@ public class PictureController {
         return ResultUtils.success(pictureVO);
     }
 
+
     /**
      * 通过 URL 上传图片（可重新上传）
      */
@@ -99,7 +100,19 @@ public class PictureController {
         PictureVO pictureVO = pictureService.uploadPicture(fileUrl, pictureUploadRequest, loginUser);
         return ResultUtils.success(pictureVO);
     }
-
+    /**
+     * 通过 URL 上传帖子图片（可重新上传）
+     */
+    @PostMapping("/uploadPostImg/url")
+    @SaSpaceCheckPermission(value = SpaceUserPermissionConstant.POST_UPLOAD)
+    public BaseResponse<PictureVO> uploadPostPictureByUrl(
+            @RequestBody PictureUploadRequest pictureUploadRequest,
+            HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        String fileUrl = pictureUploadRequest.getFileUrl();
+        PictureVO pictureVO = pictureService.uploadPicture(fileUrl, pictureUploadRequest, loginUser);
+        return ResultUtils.success(pictureVO);
+    }
 
     /**
      * 删除图片
@@ -128,8 +141,6 @@ public class PictureController {
         // 将实体类和 DTO 进行转换
         File file = new File();
         BeanUtils.copyProperties(pictureUpdateRequest, file);
-        // 注意将 list 转为 string
-        file.setTags(JSONUtil.toJsonStr(pictureUpdateRequest.getTags()));
         // 数据校验
         pictureService.validPicture(file);
         // 判断是否存在
@@ -187,8 +198,19 @@ public class PictureController {
             ThrowUtils.throwIf(space == null, ErrorCode.NOT_FOUND_ERROR, "空间不存在");
         }
         // 获取权限列表
+        // 如果是资源的创建者，则拥有所有权限（除上传）
         User loginUser = userService.getLoginUser(request);
-        List<String> permissionList = spaceUserAuthManager.getPermissionList(file,space, loginUser);
+        List<String> permissionList = new ArrayList<>();
+        if (file.getUserId().equals(loginUser.getId())) {
+
+            permissionList.add("picture:view");
+            //permissionList.add("picture:upload");
+            permissionList.add("picture:edit");
+            permissionList.add("picture:delete");
+            //permissionList.addAll(spaceUserAuthManager.getPermissionsByRole());
+        }else{
+            permissionList = spaceUserAuthManager.getPermissionList(file,space, loginUser);
+        }
         PictureVO pictureVO = pictureService.getPictureVO(file, request);
         pictureVO.setPermissionList(permissionList);
         // 填充空间类型（供前端判断是否支持评论等场景）
@@ -220,6 +242,7 @@ public class PictureController {
      * 分页获取图片列表（封装类）
      */
     @PostMapping("/list/page/vo")
+    //@SaSpaceCheckPermission(value = SpaceUserPermissionConstant.PICTURE_VIEW)
     public BaseResponse<Page<PictureVO>> listPictureVOByPage(@RequestBody PictureQueryRequest pictureQueryRequest,
                                                              HttpServletRequest request) {
         long current = pictureQueryRequest.getCurrent();
@@ -230,7 +253,9 @@ public class PictureController {
         if (spaceId == null) {
             // 普通用户默认只能查看已过审的公开数据
             pictureQueryRequest.setReviewStatus(PictureReviewStatusEnum.PASS.getValue());
-            pictureQueryRequest.setNullSpaceId(true);
+            if(pictureQueryRequest.getUserId() == null){
+                pictureQueryRequest.setNullSpaceId(true);
+            }
         } else {
             // 私有空间
             boolean hasPermission = StpKit.SPACE.hasPermission(SpaceUserPermissionConstant.PICTURE_VIEW);
@@ -316,9 +341,7 @@ public class PictureController {
     @GetMapping("/tag_category")
     public BaseResponse<PictureTagCategory> listPictureTagCategory() {
         PictureTagCategory pictureTagCategory = new PictureTagCategory();
-        List<String> tagList = Arrays.asList("热门", "搞笑", "生活", "高清", "艺术", "校园", "背景", "简历", "创意","游戏","动漫","人物");
-        List<String> categoryList = Arrays.asList("模板", "电商", "表情包", "素材", "海报","美图","壁纸");
-        pictureTagCategory.setTagList(tagList);
+        List<String> categoryList = Arrays.asList("程序员", "生活", "娱乐", "动漫宅", "游戏");
         pictureTagCategory.setCategoryList(categoryList);
         return ResultUtils.success(pictureTagCategory);
     }

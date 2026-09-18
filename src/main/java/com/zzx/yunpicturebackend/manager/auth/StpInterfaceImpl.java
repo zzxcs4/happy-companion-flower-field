@@ -13,16 +13,10 @@ import cn.hutool.json.JSONUtil;
 import com.zzx.yunpicturebackend.exception.BusinessException;
 import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.manager.auth.model.SpaceUserAuthContext;
-import com.zzx.yunpicturebackend.model.entity.File;
-import com.zzx.yunpicturebackend.model.entity.Space;
-import com.zzx.yunpicturebackend.model.entity.SpaceUser;
-import com.zzx.yunpicturebackend.model.entity.User;
+import com.zzx.yunpicturebackend.model.entity.*;
 import com.zzx.yunpicturebackend.model.enums.SpaceRoleEnum;
 import com.zzx.yunpicturebackend.model.enums.SpaceTypeEnum;
-import com.zzx.yunpicturebackend.service.PictureService;
-import com.zzx.yunpicturebackend.service.SpaceService;
-import com.zzx.yunpicturebackend.service.SpaceUserService;
-import com.zzx.yunpicturebackend.service.UserService;
+import com.zzx.yunpicturebackend.service.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -50,6 +44,8 @@ public class StpInterfaceImpl implements StpInterface {
     private SpaceUserService spaceUserService;
     @Resource
     private PictureService pictureService;
+    @Resource
+    private PostService postService;
 
 
     /**
@@ -91,6 +87,9 @@ public class StpInterfaceImpl implements StpInterface {
                 case "picture":
                 case "file":
                     authRequest.setPictureId(id);
+                    break;
+                case "post":
+                    authRequest.setPostId(id);
                     break;
                 case "spaceUser":
                     authRequest.setSpaceUserId(id);
@@ -155,25 +154,57 @@ public class StpInterfaceImpl implements StpInterface {
             Long pictureId = authContext.getPictureId();
             // 图片 id 也没有，则默认通过权限校验
             if (pictureId == null) {
-                return ADMIN_PERMISSIONS;
-            }
-            File file = pictureService.lambdaQuery()
-                    .eq(File::getId, pictureId)
-                    .select(File::getId, File::getSpaceId, File::getUserId)
-                    .one();
-            if (file == null) {
-                throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "未找到图片信息");
-            }
-            spaceId = file.getSpaceId();
-            // 公共图库，仅本人或管理员可操作
-            if (spaceId == null) {
-                if (file.getUserId().equals(userId) || userService.isAdmin(loginUser)) {
+                Long postId = authContext.getPostId();
+                if (postId == null) {
                     return ADMIN_PERMISSIONS;
-                } else {
-                    // 不是自己的图片，仅可查看
-                    return Collections.singletonList(SpaceUserPermissionConstant.PICTURE_VIEW);
+                }
+                Post post = postService.lambdaQuery()
+                        .eq(Post::getId, postId)
+                        .select(Post::getId, Post::getSpaceId, Post::getUserId)
+                        .one();
+                if (post == null) {
+                    throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "未找到帖子信息");
+                }
+                // 帖子的创建者可拥有对应帖子相关的所有权限（除上传）
+                if (post.getUserId().equals(userId)) {
+                    return spaceUserAuthManager.getPermissionsByRole(SpaceRoleEnum.EDITOR.getValue());
+                }
+                spaceId = post.getSpaceId();
+                // 公共图库，仅本人或管理员可操作
+//                if (spaceId == null) {
+//                    if (post.getUserId().equals(userId) || userService.isAdmin(loginUser)) {
+//                        return ADMIN_PERMISSIONS;
+//                    } else {
+//                        // 不是自己的帖子，仅可查看
+//                        return Collections.singletonList(SpaceUserPermissionConstant.POST_VIEW);
+//                    }
+//                }
+            }else {
+                File file = pictureService.lambdaQuery()
+                        .eq(File::getId, pictureId)
+                        .select(File::getId, File::getSpaceId, File::getUserId)
+                        .one();
+                if (file == null) {
+                    throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "未找到图片信息");
+                }
+                // 文件的创建者可拥有对应帖子相关的所有权限（除上传）
+                if (file.getUserId().equals(userId)) {
+                    return spaceUserAuthManager.getPermissionsByRole(SpaceRoleEnum.EDITOR.getValue());
+                }
+                spaceId = file.getSpaceId();
+                // 公共图库，仅本人或管理员可操作
+                if (spaceId == null) {
+                    if (file.getUserId().equals(userId) || userService.isAdmin(loginUser)) {
+                        return ADMIN_PERMISSIONS;
+                    } else {
+                        // 不是自己的图片，仅可查看
+                        return Collections.singletonList(SpaceUserPermissionConstant.PICTURE_VIEW);
+                    }
                 }
             }
+
+
+
         }
         // 获取 Space 对象
         Space space = spaceService.getById(spaceId);
@@ -195,8 +226,21 @@ public class StpInterfaceImpl implements StpInterface {
                     .eq(SpaceUser::getUserId, userId)
                     .one();
             if (spaceUser == null) {
+                if(space.getSpaceType() == SpaceTypeEnum.FIELD.getValue()&&space.getStatus()==0){
+                    return Collections.singletonList(SpaceUserPermissionConstant.POST_VIEW);
+                }
                 return new ArrayList<>();
             }
+//            // 文件的创建者可拥有对应文件相关的所有权限（除上传）
+            if(authContext.getPictureId() != null){
+            File file = pictureService.lambdaQuery()
+                    .eq(File::getId, authContext.getPictureId())
+                    .select(File::getId, File::getSpaceId, File::getUserId)
+                    .one();
+            if (file.getUserId().equals(userId)) {
+                return spaceUserAuthManager.getPermissionsByRole(SpaceRoleEnum.EDITOR.getValue());
+            }}
+            //
             return spaceUserAuthManager.getPermissionsByRole(spaceUser.getSpaceRole());
         }
     }

@@ -2,7 +2,6 @@ package com.zzx.yunpicturebackend.service.impl;
 
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.ObjUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zzx.yunpicturebackend.exception.BusinessException;
@@ -185,37 +184,6 @@ public class SpaceAnalyzeServiceImpl extends ServiceImpl<SpaceMapper, Space>
                     Long totalSize = ((Number) result.get("totalSize")).longValue();
                     return new SpaceCategoryAnalyzeResponse(category, count, totalSize);
                 })
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<SpaceTagAnalyzeResponse> getSpaceTagAnalyze(SpaceTagAnalyzeRequest spaceTagAnalyzeRequest, User loginUser) {
-        ThrowUtils.throwIf(spaceTagAnalyzeRequest == null, ErrorCode.PARAMS_ERROR);
-
-        // 检查权限
-        checkSpaceAnalyzeAuth(spaceTagAnalyzeRequest, loginUser);
-
-        // 构造查询条件
-        QueryWrapper<File> queryWrapper = new QueryWrapper<>();
-        fillAnalyzeQueryWrapper(spaceTagAnalyzeRequest, queryWrapper);
-
-        // 查询所有符合条件的标签
-        queryWrapper.select("tags");
-        List<String> tagsJsonList = pictureService.getBaseMapper().selectObjs(queryWrapper)
-                .stream()
-                .filter(ObjUtil::isNotNull)
-                .map(Object::toString)
-                .collect(Collectors.toList());
-
-        // 合并所有标签并统计使用次数
-        Map<String, Long> tagCountMap = tagsJsonList.stream()
-                .flatMap(tagsJson -> JSONUtil.toList(tagsJson, String.class).stream())
-                .collect(Collectors.groupingBy(tag -> tag, Collectors.counting()));
-
-        // 转换为响应对象，按使用次数降序排序
-        return tagCountMap.entrySet().stream()
-                .sorted((e1, e2) -> Long.compare(e2.getValue(), e1.getValue())) // 降序排列
-                .map(entry -> new SpaceTagAnalyzeResponse(entry.getKey(), entry.getValue()))
                 .collect(Collectors.toList());
     }
 

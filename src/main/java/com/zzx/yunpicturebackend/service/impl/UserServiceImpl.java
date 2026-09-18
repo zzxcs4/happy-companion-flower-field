@@ -175,7 +175,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
     
     @Override
-    public void autoSignOnVisit(Long userId, Long fieldId, Long spaceId) {
+    public void autoSignOnVisit(Long userId, Long spaceId) {
         LocalDateTime now = LocalDateTime.now();
         String monthKey = now.format(DateTimeFormatter.ofPattern(":yyyyMM"));
         int dayOfMonth = now.getDayOfMonth();
@@ -185,7 +185,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         redisTemplate.opsForValue().setBit(websiteKey, dayOfMonth - 1, true);
         
         // 2. 记录社区访问 bitmap（同时作为签到记录）
-        String fieldVisitKey = VISIT_FIELD_KEY + userId + ":" + fieldId + monthKey;
+        String fieldVisitKey = VISIT_FIELD_KEY + userId + ":" + spaceId + monthKey;
         redisTemplate.opsForValue().setBit(fieldVisitKey, dayOfMonth - 1, true);
         
         // 3. 记录传统签到 bitmap（保持兼容）
@@ -215,18 +215,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         
         // 5. 连签 3 天奖励 +0.6（6 分封顶）
         if (consecutiveDays == 3) {
-            String bonusKey = SIGN_STREAK_BONUS_KEY + userId + ":" + fieldId;
+            String bonusKey = SIGN_STREAK_BONUS_KEY + userId + ":" + spaceId;
             Object bonusObj = redisTemplate.opsForValue().get(bonusKey);
             double totalBonus = bonusObj != null ? Double.parseDouble(bonusObj.toString()) : 0.0;
             if (totalBonus < 6.0) {
                 double bonus = Math.min(0.6, 6.0 - totalBonus);
-                userFieldScoreService.addScore(userId, fieldId, bonus);
+                userFieldScoreService.addScore(userId, spaceId, bonus);
                 redisTemplate.opsForValue().set(bonusKey, totalBonus + bonus, 30, TimeUnit.DAYS);
             }
         }
         
         // 6. 重置连续未签周数（用户今天签到了）
-        String inactiveWeeksKey = INACTIVE_WEEKS_KEY + userId + ":" + fieldId;
+        String inactiveWeeksKey = INACTIVE_WEEKS_KEY + userId + ":" + spaceId;
         redisTemplate.delete(inactiveWeeksKey);
     }
     

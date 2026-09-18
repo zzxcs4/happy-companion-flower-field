@@ -3,7 +3,6 @@ package com.zzx.yunpicturebackend.service.impl;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.qcloud.cos.model.*;
 import com.zzx.yunpicturebackend.common.BaseResponse;
@@ -48,6 +47,8 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
     // 定义常量
     private static final long PART_SIZE = 5 * 1024 * 1024; // 5MB
     private static final int MAX_PARTS = 10000; // COS最大分块数限制
+    /** 私有视频签名 URL 有效期（秒）：12 小时 */
+    private static final long SIGN_URL_EXPIRE_SECONDS = 12 * 60 * 60L;
     @Resource
     private CosClientConfig cosClientConfig;
     @Resource
@@ -184,6 +185,20 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
      */
     @Override
     public BaseResponse<VideoVO> IdempotentMultipartUploader(File file, Long spaceId, String md5, Long videoId,HttpServletRequest request) {
+        return IdempotentMultipartUploader(file, spaceId, md5, videoId, userService.getLoginUser(request));
+    }
+
+    /**
+     * 分块上传（幂等，支持断点续传），登录用户直接传入，不依赖 request
+     * @param file 本地待上传文件
+     * @param spaceId 空间 id
+     * @param md5 文件 MD5
+     * @param videoId 文件 id（非空表示更新）
+     * @param loginUser 登录用户
+     * @return 上传结果
+     */
+    @Override
+    public BaseResponse<VideoVO> IdempotentMultipartUploader(File file, Long spaceId, String md5, Long videoId, User loginUser) {
         // 花田空间容量检查（满时通知管理员并给予300MB宽限，宽限用完后禁止上传）
         if (spaceId != null) {
             Space capacitySpace = spaceService.getById(spaceId);
@@ -195,7 +210,7 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
         // 按照用户 id 划分目录 => 按照空间划分目录
         String uploadPathPrefix;
         if (spaceId == null) {
-            uploadPathPrefix = String.format("public/%s", userService.getLoginUser(request).getId());
+            uploadPathPrefix = String.format("public/%s", loginUser.getId());
         } else {
             uploadPathPrefix = String.format("space/%s", spaceId);
         }
@@ -235,6 +250,9 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
         partETags.sort(Comparator.comparingInt(PartETag::getPartNumber));
         String url = cosManager.completeMultipartUpload(uploadPath, uploadId, partETags);
 
+        // 视频对象设为私有读（防下载），前端通过临时签名 URL 播放
+        cosManager.setObjectPrivate(uploadPath);
+
         // 生成视频缩略图
         String thumbnailUrl = null;
         if (videoThumbnailManager.isAvailable()) {
@@ -255,12 +273,12 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
         file1.setName(uploadFilename);
         file1.setSize(fileSize);
         file1.setFormat(FileUtil.getSuffix(file.getName()));
-        file1.setUserId(userService.getLoginUser(request).getId());
+        file1.setUserId(loginUser.getId());
         file1.setSpaceId(spaceId);
         //视频时长怎么获取？
         //file1.setDuration();
         // 补充审核参数
-        fillReviewParams(spaceId, file1, userService.getLoginUser(request));
+        fillReviewParams(spaceId, file1, loginUser);
         // 如果 pictureId 不为空，表示更新，否则是新增
         if (videoId != null) {
             // 如果是更新，需要补充 id 和编辑时间
@@ -272,7 +290,7 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
         transactionTemplate.execute(status -> {
             boolean result = this.saveOrUpdate(file1);
             ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "图片上传失败");
-            if( space != null&&(space.getSpaceType()==0||space.getSpaceType()==1)){
+            if( space != null && (space.getStatus() != 0)){
                 if (finalSpaceId != null) {
                     boolean update = spaceService.lambdaUpdate()
                             .eq(Space::getId, finalSpaceId)
@@ -290,7 +308,12 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
         if (audioCompressService.isAudioFormat(file1.getFormat())){
             audioCompressService.compressAsync(file1.getId());
         }
-        return ResultUtils.success(VideoVO.objToVo(file1));
+        // 私有视频返回前端前转为临时签名 URL（有效期 12 小时，过期需重新获取）
+        VideoVO videoVO = VideoVO.objToVo(file1);
+        if (videoVO != null && StrUtil.isNotBlank(videoVO.getUrl())) {
+            videoVO.setUrl(cosManager.signCosUrl(videoVO.getUrl(), SIGN_URL_EXPIRE_SECONDS));
+        }
+        return ResultUtils.success(videoVO);
     }
 
     /**
@@ -303,8 +326,6 @@ public class VideosServiceImpl extends ServiceImpl<FileMapper, com.zzx.yunpictur
         // 在此处将实体类和 DTO 进行转换
         com.zzx.yunpicturebackend.model.entity.File file = new com.zzx.yunpicturebackend.model.entity.File();
         BeanUtils.copyProperties(pictureEditRequest, file);
-        // 注意将 list 转为 string
-        file.setTags(JSONUtil.toJsonStr(pictureEditRequest.getTags()));
         // 设置编辑时间
         file.setEditTime(new Date());
         // 数据校验

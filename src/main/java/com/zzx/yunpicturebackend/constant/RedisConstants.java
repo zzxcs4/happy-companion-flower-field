@@ -3,6 +3,8 @@ package com.zzx.yunpicturebackend.constant;
 public interface RedisConstants {
     String BLOG_LIKED_KEY = "blog:liked:";
     String FEED_KEY = "feed:";
+    /** 关注 feed 集合过期天数：推送/读取时续期，30 天无活动自动过期（配合惰性删除兜底清理幽灵数据） */
+    int FEED_EXPIRE_DAYS = 30;
     String USER_SIGN_KEY="sign:";
     String SPACE_CAPACITY_GRACE_KEY = "space:capacity:grace:";
     
@@ -21,6 +23,6 @@ public interface RedisConstants {
     String SIGN_STREAK_BONUS_KEY = "sign:streak:bonus:";
     /** 连续未签周数: inactive:weeks:{userId} */
     String INACTIVE_WEEKS_KEY = "inactive:weeks:";
-    /** 推荐结果缓存: recommend:fields:{userId}:{topN} */
-    String RECOMMEND_FIELDS_KEY = "recommend:fields:";
+    /** 推荐结果缓存: recommend:spaces:{userId}:{topN} */
+    String RECOMMEND_FIELDS_KEY = "recommend:spaces:";
 }

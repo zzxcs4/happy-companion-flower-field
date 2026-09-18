@@ -25,4 +25,21 @@ public interface SpaceUserPermissionConstant {
      * 图片删除权限
      */
     String PICTURE_DELETE = "picture:delete";
+
+    /**
+     * 帖子查看权限
+     */
+    String POST_VIEW = "post:view";
+    /**
+     * 帖子上传权限
+     */
+    String POST_UPLOAD = "post:upload";
+    /**
+     * 帖子编辑权限
+     */
+    String POST_EDIT = "post:edit";
+    /**
+     * 帖子删除权限
+     */
+    String POST_DELETE = "post:delete";
 }

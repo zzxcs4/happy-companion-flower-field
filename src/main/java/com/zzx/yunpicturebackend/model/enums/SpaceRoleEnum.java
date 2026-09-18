@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 public enum SpaceRoleEnum {
 
     VIEWER("浏览者", "viewer"),
+    MEMBER("成员", "member"),
     EDITOR("编辑者", "editor"),
     ADMIN("管理员", "admin");
 

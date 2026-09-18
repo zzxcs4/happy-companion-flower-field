@@ -6,7 +6,7 @@
 
     <resultMap id="BaseResultMap" type="com.zzx.yunpicturebackend.model.entity.Post">
             <id property="id" column="id" />
-            <result property="fieldId" column="fieldId" />
+            <result property="spaceId" column="spaceId" />
             <result property="userId" column="userId" />
             <result property="title" column="title" />
             <result property="images" column="images" />
@@ -18,7 +18,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,fieldId,userId,title,images,content,
+        id,spaceId,userId,title,images,content,
         liked,comments,createTime,updateTime
     </sql>
 </mapper>

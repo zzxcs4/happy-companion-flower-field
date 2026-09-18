@@ -27,6 +27,11 @@ public class PictureUploadRequest implements Serializable {
      */
     private Long spaceId;
 
+    /**
+     * 是否允许下载：0-不允许 1-允许（默认允许，不传则保持默认）
+     */
+    private Integer canDownload;
+
 
     private static final long serialVersionUID = 1L;  
 }

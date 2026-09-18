@@ -2,7 +2,7 @@ package com.zzx.yunpicturebackend.manager.auth.annotation;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import cn.dev33.satoken.annotation.SaMode;
-import cn.hutool.core.annotation.AliasFor;
+import org.springframework.core.annotation.AliasFor;
 import com.zzx.yunpicturebackend.manager.auth.StpKit;
 
 import java.lang.annotation.ElementType;

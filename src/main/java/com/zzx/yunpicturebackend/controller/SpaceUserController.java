@@ -9,6 +9,7 @@ import com.zzx.yunpicturebackend.exception.ErrorCode;
 import com.zzx.yunpicturebackend.exception.ThrowUtils;
 import com.zzx.yunpicturebackend.manager.auth.SpaceUserPermissionConstant;
 import com.zzx.yunpicturebackend.manager.auth.annotation.SaSpaceCheckPermission;
+import com.zzx.yunpicturebackend.mapper.SpaceMapper;
 import com.zzx.yunpicturebackend.model.dto.spaceuser.SpaceUserAddRequest;
 import com.zzx.yunpicturebackend.model.dto.spaceuser.SpaceUserEditRequest;
 import com.zzx.yunpicturebackend.model.dto.spaceuser.SpaceUserQueryRequest;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/spaceUser")
@@ -35,6 +37,9 @@ public class SpaceUserController {
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private SpaceMapper spaceMapper;
 
 
     /**
@@ -127,15 +132,16 @@ public class SpaceUserController {
     /**
      * 查询我加入的团队空间列表
      */
-    @PostMapping("/list/my")
-    public BaseResponse<List<SpaceUserVO>> listMyTeamSpace(HttpServletRequest request) {
+    @GetMapping("/list/my")
+    public BaseResponse<List<String>> listMyTeamSpace(HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
-        SpaceUserQueryRequest spaceUserQueryRequest = new SpaceUserQueryRequest();
-        spaceUserQueryRequest.setUserId(loginUser.getId());
-        List<SpaceUser> spaceUserList = spaceUserService.list(
-                spaceUserService.getQueryWrapper(spaceUserQueryRequest)
-        );
-        return ResultUtils.success(spaceUserService.getSpaceUserVOList(spaceUserList));
+        List<String> spaceNameList = spaceMapper.getTeamSpaceNamesByUserId(loginUser.getId());
+        return ResultUtils.success(spaceNameList);
+    }
+    @GetMapping("/isCreate")
+    public BaseResponse<Boolean> isCreateTeamSpace(HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        return ResultUtils.success(spaceMapper.hasCreatedTeamSpace(loginUser.getId()));
     }
 }
 

@@ -28,10 +28,5 @@ public class PictureEditByBatchRequest implements Serializable {
      */
     private String nameRule;
 
-    /**
-     * 标签
-     */
-    private List<String> tags;
-
     private static final long serialVersionUID = 1L;
 }

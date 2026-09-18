@@ -46,10 +46,11 @@ import java.util.stream.Collectors;
 
 /**
 * @author zzx
-* @description 针对表【field(花田)】的数据库操作Service实现
+* @description 针对表【field(花田)】的数据库操作Service实现（已停用，社区概念已并入空间）
 * @createDate 2025-10-17 18:48:45
+* @Deprecated
 */
-@Service
+//@Service
 public class FieldServiceImpl extends ServiceImpl<FieldMapper, Field>
     implements FieldService{
     @Resource

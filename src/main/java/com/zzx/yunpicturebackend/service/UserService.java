@@ -39,10 +39,9 @@ public interface UserService extends IService<User> {
      * 访问社区时自动签到
      *
      * @param userId  用户id
-     * @param fieldId 花田id
-     * @param spaceId 空间id
+     * @param spaceId 社区空间id
      */
-    void autoSignOnVisit(Long userId, Long fieldId, Long spaceId);
+    void autoSignOnVisit(Long userId, Long spaceId);
     
     /**
      * 检查用户今日是否已签到
