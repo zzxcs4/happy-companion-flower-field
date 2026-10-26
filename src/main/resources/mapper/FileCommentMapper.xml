@@ -4,7 +4,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.zzx.yunpicturebackend.mapper.FileCommentMapper">
 
-    <select id="listCommentsWithUser" resultType="com.zzx.yunpicturebackend.model.entity.FileComment">
+    <select id="listCommentsWithUser" resultType="com.zzx.flowerfieldfrienddisk.model.entity.FileComment">
         select fc.id, fc.fileId, fc.content, fc.userId, fc.atUserIds,
                fc.createTime, fc.updateTime, u.userName, u.userAvatar
         from file_comment fc

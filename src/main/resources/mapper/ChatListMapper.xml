@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.zzx.yunpicturebackend.mapper.ChatListMapper">
-    <select id="selectChat" resultType="com.zzx.yunpicturebackend.manager.websocket.model.ChatList">
+    <select id="selectChat" resultType="com.zzx.flowerfieldfrienddisk.manager.websocket.model.ChatList">
         select * from chat_list where linkId = #{linkId} order by createtime asc;
     </select>
 
@@ -11,7 +11,7 @@
         values (#{linkId},#{fromId},#{content},#{timestamp},#{toId},0);
     </insert>
 
-    <select id="selectUnreadConversations" resultType="com.zzx.yunpicturebackend.model.vo.UnreadChatVO">
+    <select id="selectUnreadConversations" resultType="com.zzx.flowerfieldfrienddisk.model.vo.UnreadChatVO">
         select userId, count(*) as unreadCount
         from chat_list
         where toId = #{toId} and isRead = 0

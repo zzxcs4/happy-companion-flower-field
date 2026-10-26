@@ -1,0 +1,36 @@
+package com.zzx.flowerfieldfrienddisk.service;
+
+import com.zzx.flowerfieldfrienddisk.common.BaseResponse;
+import com.zzx.flowerfieldfrienddisk.model.dto.picture.PictureEditRequest;
+import com.zzx.flowerfieldfrienddisk.model.entity.User;
+import com.baomidou.mybatisplus.extension.service.IService;
+import com.zzx.flowerfieldfrienddisk.model.vo.VideoVO;
+
+import javax.servlet.http.HttpServletRequest;
+import java.io.File;
+
+/**
+* @author zzx
+* @description 针对表【videos(视频信息表)】的数据库操作Service
+* @createDate 2026-04-04 12:03:16
+*/
+public interface VideosService extends IService<com.zzx.flowerfieldfrienddisk.model.entity.File> {
+
+    BaseResponse<Boolean> checkFile(String fileMd5);
+
+    BaseResponse<Boolean> checkChunk(String fileMd5, int chunk);
+
+    BaseResponse<VideoVO> IdempotentMultipartUploader(File file, Long spaceId, String md5, Long videoId,HttpServletRequest request);
+
+    /**
+     * 分块上传（幂等，支持断点续传），登录用户直接传入，不依赖 request
+     * 供帖子视频上传等已持有 loginUser 的场景复用
+     */
+    BaseResponse<VideoVO> IdempotentMultipartUploader(File file, Long spaceId, String md5, Long videoId, User loginUser);
+
+    void editFile(PictureEditRequest pictureEditRequest, User loginUser);
+
+    void fillReviewParams(Long spaceId, com.zzx.flowerfieldfrienddisk.model.entity.File file, User loginUser);
+
+    void validFile(com.zzx.flowerfieldfrienddisk.model.entity.File file);
+}

@@ -5,7 +5,7 @@
 <mapper namespace="com.zzx.yunpicturebackend.mapper.FileMentionMapper">
 
     <!-- @ 我的提及列表：联表文件名、评论内容、评论者信息，过滤已删除的评论/文件 -->
-    <select id="listMentionsWithDetail" resultType="com.zzx.yunpicturebackend.model.vo.FileMentionVO">
+    <select id="listMentionsWithDetail" resultType="com.zzx.flowerfieldfrienddisk.model.vo.FileMentionVO">
         select fm.commentId, fm.fileId, fm.spaceId,
                f.name as fileName, fc.content,
                u.userName as fromUserName, u.userAvatar as fromUserAvatar,

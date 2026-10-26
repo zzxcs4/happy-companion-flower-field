@@ -4,7 +4,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.zzx.yunpicturebackend.mapper.UserFieldMapper">
 
-    <resultMap id="BaseResultMap" type="com.zzx.yunpicturebackend.model.entity.UserField">
+    <resultMap id="BaseResultMap" type="com.zzx.flowerfieldfrienddisk.model.entity.UserField">
         <id property="id" column="id" />
         <result property="userId" column="user_id" />
         <result property="fieldId" column="field_id" />
